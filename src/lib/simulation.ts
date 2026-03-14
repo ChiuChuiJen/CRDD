@@ -1,0 +1,230 @@
+import { Coin, MarketEvent, ImpactLevel } from '../data/parser';
+
+export interface SimulationState {
+  currentTime: number;
+  coins: Coin[];
+  indexValue: number;
+  indexHistory: { time: number, price: number }[];
+  indexDailyHistory: { date: number, open: number, high: number, low: number, close: number }[];
+  activeEvents: { event: MarketEvent, targetCoinId?: string, impact: number, expiresAt: number }[];
+  news: { time: number, text: string }[];
+  top50Ids: string[];
+}
+
+// Geometric Brownian Motion step
+function gbmStep(S: number, mu: number, sigma: number, dt: number): number {
+  // dt is in years, let's say 1 tick (10 min) = 10 / (365 * 24 * 60) years
+  const dW = Math.sqrt(dt) * (Math.random() + Math.random() + Math.random() + Math.random() + Math.random() + Math.random() - 3) * Math.sqrt(2); // Approximation of normal distribution
+  const dS = mu * S * dt + sigma * S * dW;
+  return S + dS;
+}
+
+export function initializeSimulation(coins: Coin[]): SimulationState {
+  // Determine initial top 50
+  const sorted = [...coins].sort((a, b) => b.volume30d - a.volume30d);
+  const top50Ids = sorted.slice(0, 50).map(c => c.id);
+
+  const now = Date.now();
+  const initializedCoins = coins.map(c => ({
+    ...c,
+    dailyHistory: [{
+      date: now,
+      open: c.initialPrice,
+      high: c.initialPrice,
+      low: c.initialPrice,
+      close: c.initialPrice
+    }]
+  }));
+
+  return {
+    currentTime: now,
+    coins: initializedCoins,
+    indexValue: 10000,
+    indexHistory: [{ time: now, price: 10000 }],
+    indexDailyHistory: [{ date: now, open: 10000, high: 10000, low: 10000, close: 10000 }],
+    activeEvents: [],
+    news: [],
+    top50Ids
+  };
+}
+
+export function tickSimulation(
+  state: SimulationState, 
+  eventsA: MarketEvent[], 
+  eventsB: MarketEvent[], 
+  impacts: ImpactLevel[]
+): SimulationState {
+  const TICK_MS = 10 * 60 * 1000; // 10 minutes
+  const dt = TICK_MS / (365 * 24 * 60 * 60 * 1000); // dt in years
+  
+  const newTime = state.currentTime + TICK_MS;
+  const isNewDay = new Date(newTime).getDate() !== new Date(state.currentTime).getDate();
+  
+  let newEvents = [...state.activeEvents].filter(e => e.expiresAt > newTime);
+  let newNews = [...state.news];
+
+  // Generate new events if it's a new day
+  if (isNewDay) {
+    const numEvents = Math.floor(Math.random() * 5); // 0 to 4 events
+    for (let i = 0; i < numEvents; i++) {
+      const isMarketWide = Math.random() > 0.8; // 20% chance for market-wide
+      const eventList = isMarketWide ? eventsB : eventsA;
+      const event = eventList[Math.floor(Math.random() * eventList.length)];
+      
+      // Determine impact
+      const rand = Math.random();
+      let cumulative = 0;
+      let selectedImpact = impacts[0];
+      for (const imp of impacts) {
+        cumulative += imp.probability;
+        if (rand <= cumulative) {
+          selectedImpact = imp;
+          break;
+        }
+      }
+
+      let impactValue = 0;
+      if (selectedImpact.isSymmetric) {
+        const sign = Math.random() > 0.5 ? 1 : -1;
+        impactValue = sign * (selectedImpact.min + Math.random() * (selectedImpact.max - selectedImpact.min));
+      } else {
+        impactValue = selectedImpact.min + Math.random() * (selectedImpact.max - selectedImpact.min);
+      }
+
+      const targetCoinId = isMarketWide ? undefined : state.coins[Math.floor(Math.random() * state.coins.length)].id;
+      
+      newEvents.push({
+        event,
+        targetCoinId,
+        impact: impactValue,
+        expiresAt: newTime + 24 * 60 * 60 * 1000 // 1 day duration
+      });
+
+      newNews.unshift({
+        time: newTime,
+        text: `${isMarketWide ? '【全市場】' : `【${targetCoinId}】`}${event.description}`
+      });
+    }
+
+    // Keep only latest 50 news
+    if (newNews.length > 50) newNews = newNews.slice(0, 50);
+  }
+
+  // Calculate index weights
+  const top50Coins = state.coins.filter(c => state.top50Ids.includes(c.id));
+  const totalTop50Volume = top50Coins.reduce((sum, c) => sum + c.volume30d, 0);
+
+  let indexChangeRatio = 0;
+
+  const newCoins = state.coins.map(coin => {
+    let mu = coin.drift;
+    let sigma = coin.volatility;
+
+    // Apply active events
+    for (const ev of newEvents) {
+      if (!ev.targetCoinId || ev.targetCoinId === coin.id) {
+        // Event impact is spread over the day (144 ticks)
+        mu += ev.impact / dt / 144; 
+      }
+    }
+
+    // Stabilization mechanism (护盘/抛售)
+    // If price changes too much in a short time, revert mean
+    const dailyStartPrice = coin.dailyHistory.length > 0 ? coin.dailyHistory[coin.dailyHistory.length - 1].close : coin.initialPrice;
+    const dailyChange = (coin.price - dailyStartPrice) / dailyStartPrice;
+    
+    if (dailyChange > 0.2) {
+      // Too high, sell off
+      mu -= 0.5;
+    } else if (dailyChange < -0.2) {
+      // Too low, buy in
+      mu += 0.5;
+    }
+
+    let newPrice = gbmStep(coin.price, mu, sigma, dt);
+    if (newPrice < 0.00000001) newPrice = 0.00000001; // Prevent negative or zero
+
+    const priceChangeRatio = (newPrice - coin.price) / coin.price;
+
+    if (state.top50Ids.includes(coin.id)) {
+      const weight = coin.volume30d / totalTop50Volume;
+      indexChangeRatio += priceChangeRatio * weight;
+    }
+
+    // Update history
+    const history = [...coin.history, { time: newTime, price: newPrice }];
+    if (history.length > 100) history.shift(); // Keep last 100 ticks for intraday
+
+    // Update daily history
+    const dailyHistory = [...coin.dailyHistory];
+    if (isNewDay) {
+      const prevClose = dailyHistory.length > 0 ? dailyHistory[dailyHistory.length - 1].close : coin.initialPrice;
+      dailyHistory.push({
+        date: newTime,
+        open: prevClose,
+        high: Math.max(prevClose, newPrice),
+        low: Math.min(prevClose, newPrice),
+        close: newPrice
+      });
+    } else if (dailyHistory.length > 0) {
+      const last = { ...dailyHistory[dailyHistory.length - 1] };
+      last.high = Math.max(last.high, newPrice);
+      last.low = Math.min(last.low, newPrice);
+      last.close = newPrice;
+      dailyHistory[dailyHistory.length - 1] = last;
+    }
+
+    // Simulate volume
+    const tickVolume = coin.volume30d * (0.0001 + Math.random() * 0.0005);
+    const newVolume30d = coin.volume30d + tickVolume - (coin.volume30d / 30 / 144); // Rough rolling window
+
+    return {
+      ...coin,
+      price: newPrice,
+      history,
+      dailyHistory,
+      volume30d: newVolume30d
+    };
+  });
+
+  const newIndexValue = state.indexValue * (1 + indexChangeRatio);
+
+  const indexHistory = [...state.indexHistory, { time: newTime, price: newIndexValue }];
+  if (indexHistory.length > 100) indexHistory.shift();
+
+  const indexDailyHistory = [...state.indexDailyHistory];
+  if (isNewDay) {
+    const prevIndexClose = indexDailyHistory.length > 0 ? indexDailyHistory[indexDailyHistory.length - 1].close : 10000;
+    indexDailyHistory.push({
+      date: newTime,
+      open: prevIndexClose,
+      high: Math.max(prevIndexClose, newIndexValue),
+      low: Math.min(prevIndexClose, newIndexValue),
+      close: newIndexValue
+    });
+  } else if (indexDailyHistory.length > 0) {
+    const last = { ...indexDailyHistory[indexDailyHistory.length - 1] };
+    last.high = Math.max(last.high, newIndexValue);
+    last.low = Math.min(last.low, newIndexValue);
+    last.close = newIndexValue;
+    indexDailyHistory[indexDailyHistory.length - 1] = last;
+  }
+
+  // Update top 50 every 30 days (roughly 30 * 144 ticks)
+  let newTop50Ids = state.top50Ids;
+  if (newTime % (30 * 24 * 60 * 60 * 1000) < TICK_MS) {
+    const sorted = [...newCoins].sort((a, b) => b.volume30d - a.volume30d);
+    newTop50Ids = sorted.slice(0, 50).map(c => c.id);
+  }
+
+  return {
+    currentTime: newTime,
+    coins: newCoins,
+    indexValue: newIndexValue,
+    indexHistory,
+    indexDailyHistory,
+    activeEvents: newEvents,
+    news: newNews,
+    top50Ids: newTop50Ids
+  };
+}
