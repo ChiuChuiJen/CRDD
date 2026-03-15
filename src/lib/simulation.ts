@@ -11,10 +11,17 @@ export interface SimulationState {
   top50Ids: string[];
 }
 
-// Geometric Brownian Motion step
+// Standard Normal variate using Box-Muller transform
+function randn_bm() {
+  let u = 0, v = 0;
+  while(u === 0) u = Math.random();
+  while(v === 0) v = Math.random();
+  return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+}
+
+// Geometric Brownian Motion step (kept for reference, but we use advanced step now)
 function gbmStep(S: number, mu: number, sigma: number, dt: number): number {
-  // dt is in years, let's say 1 tick (10 min) = 10 / (365 * 24 * 60) years
-  const dW = Math.sqrt(dt) * (Math.random() + Math.random() + Math.random() + Math.random() + Math.random() + Math.random() - 3) * Math.sqrt(2); // Approximation of normal distribution
+  const dW = Math.sqrt(dt) * randn_bm();
   const dS = mu * S * dt + sigma * S * dW;
   return S + dS;
 }
@@ -124,6 +131,8 @@ export function tickSimulation(
     let newVolume30d = coin.volume30d;
     let newVolume24h = coin.volume24h || 0;
     let newSentiment = coin.sentiment || 0;
+    let newVariance = coin.variance || Math.pow(coin.volatility, 2);
+    let newLastNoise = coin.lastNoise || 0;
 
     if (isTrading) {
       let mu = coin.drift;
@@ -151,7 +160,39 @@ export function tickSimulation(
         mu += 0.5;
       }
 
-      newPrice = gbmStep(coin.price, mu, sigma, dt);
+      // 1. Heston Model: Update variance (Volatility Clustering)
+      const kappa = coin.kappa || 2.0;
+      const theta = coin.theta || Math.pow(coin.volatility, 2);
+      const xi = coin.xi || 0.1;
+      
+      const dW_v = randn_bm() * Math.sqrt(dt);
+      newVariance = newVariance + kappa * (theta - newVariance) * dt + xi * Math.sqrt(Math.max(0, newVariance)) * dW_v;
+      newVariance = Math.max(0.000001, newVariance); // Prevent negative variance
+      const currentVolatility = Math.sqrt(newVariance);
+
+      // 2. Hurst Exponent: Fractional Brownian Motion approximation (Long-term memory)
+      const hurst = coin.hurst || 0.5;
+      const phi = hurst - 0.5; // AR(1) coefficient approximation
+      const epsilon = randn_bm();
+      newLastNoise = phi * newLastNoise + epsilon * Math.sqrt(1 - phi * phi);
+      const dW_s = newLastNoise * Math.sqrt(dt);
+
+      // 3. Merton Jump Diffusion: Poisson process for sudden jumps
+      const lambda = coin.lambda || 2.0;
+      const muJ = coin.muJ || 0;
+      const sigmaJ = coin.sigmaJ || 0.1;
+      
+      let jumpMultiplier = 1;
+      // Probability of jump in this dt
+      if (Math.random() < lambda * dt) {
+        const jumpSize = muJ + sigmaJ * randn_bm();
+        jumpMultiplier = Math.exp(jumpSize);
+      }
+
+      // Combine models for price step
+      const dS = mu * coin.price * dt + currentVolatility * coin.price * dW_s;
+      newPrice = (coin.price + dS) * jumpMultiplier;
+
       if (newPrice < 0.00000001) newPrice = 0.00000001; // Prevent negative or zero
 
       priceChangeRatio = (newPrice - coin.price) / coin.price;
@@ -238,7 +279,9 @@ export function tickSimulation(
       volume24h: newVolume24h,
       volume30d: newVolume30d,
       circulation: { locked, staked, circulating },
-      sentiment: newSentiment
+      sentiment: newSentiment,
+      variance: newVariance,
+      lastNoise: newLastNoise
     };
   });
 

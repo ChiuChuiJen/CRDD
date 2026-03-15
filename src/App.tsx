@@ -115,6 +115,15 @@ export default function App() {
       sentiment: 0, // Neutral sentiment for new coin
       volatility: Math.random() * 0.05 + 0.01,
       drift: (Math.random() - 0.5) * 0.001,
+      variance: Math.pow(Math.random() * 0.05 + 0.01, 2),
+      kappa: Math.random() * 2 + 1,
+      theta: Math.pow(Math.random() * 0.05 + 0.01, 2),
+      xi: Math.random() * 0.2 + 0.05,
+      lambda: Math.random() * 5 + 1,
+      muJ: (Math.random() - 0.5) * 0.1,
+      sigmaJ: Math.random() * 0.1 + 0.05,
+      hurst: Math.random() * 0.4 + 0.3,
+      lastNoise: 0,
       issueDate: now,
       tradingDate: tradingDate
     };

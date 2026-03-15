@@ -28,6 +28,15 @@ export interface Coin {
   sentiment: number; // -10 to 10
   volatility: number; // sigma
   drift: number; // mu
+  variance: number; // Heston variance
+  kappa: number; // Heston mean reversion rate
+  theta: number; // Heston long-term variance
+  xi: number; // Heston volatility of volatility
+  lambda: number; // Merton jump intensity
+  muJ: number; // Merton jump mean
+  sigmaJ: number; // Merton jump volatility
+  hurst: number; // Hurst exponent
+  lastNoise: number; // For Hurst approximation
   tradingDate?: number;
   issueDate?: number;
 }
@@ -95,7 +104,16 @@ export function parseCoins(): Coin[] {
       },
       sentiment: (Math.random() - 0.5) * 10, // -5 to 5 initial sentiment
       volatility: Math.random() * 0.05 + 0.01, // 1% to 6% base volatility
-      drift: (Math.random() - 0.5) * 0.001 // Slight drift
+      drift: (Math.random() - 0.5) * 0.001, // Slight drift
+      variance: Math.pow(Math.random() * 0.05 + 0.01, 2), // Initial variance
+      kappa: Math.random() * 2 + 1, // Mean reversion rate (1 to 3)
+      theta: Math.pow(Math.random() * 0.05 + 0.01, 2), // Long-term variance
+      xi: Math.random() * 0.2 + 0.05, // Vol of vol
+      lambda: Math.random() * 5 + 1, // Jumps per year
+      muJ: (Math.random() - 0.5) * 0.1, // Mean jump size
+      sigmaJ: Math.random() * 0.1 + 0.05, // Jump volatility
+      hurst: Math.random() * 0.4 + 0.3, // Hurst exponent (0.3 to 0.7)
+      lastNoise: 0
     };
   });
 }
