@@ -6,6 +6,7 @@ import { Dashboard } from './components/Dashboard';
 import { CoinModal } from './components/CoinModal';
 import { IndexModal } from './components/IndexModal';
 import { CoinIssuerModal } from './components/CoinIssuerModal';
+import { SentimentModal } from './components/SentimentModal';
 
 export default function App() {
   const [state, setState] = useState<SimulationState | null>(null);
@@ -20,6 +21,7 @@ export default function App() {
   const [selectedCoin, setSelectedCoin] = useState<Coin | null>(null);
   const [isIndexModalOpen, setIsIndexModalOpen] = useState(false);
   const [isIssuerOpen, setIsIssuerOpen] = useState(false);
+  const [isSentimentModalOpen, setIsSentimentModalOpen] = useState(false);
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -95,6 +97,7 @@ export default function App() {
       totalSupply: data.totalSupply,
       marketCap: data.initialPrice * data.totalSupply,
       description: data.description,
+      volume24h: 0,
       volume30d: 0,
       history: [{ time: now, price: data.initialPrice }],
       dailyHistory: [{ date: now, open: data.initialPrice, high: data.initialPrice, low: data.initialPrice, close: data.initialPrice }],
@@ -109,6 +112,7 @@ export default function App() {
         staked: Math.random() * 40 + 10,
         circulating: 0 // Will be calculated
       },
+      sentiment: 0, // Neutral sentiment for new coin
       volatility: Math.random() * 0.05 + 0.01,
       drift: (Math.random() - 0.5) * 0.001,
       issueDate: now,
@@ -148,6 +152,7 @@ export default function App() {
         setTheme={setTheme}
         onOpenIndexModal={() => setIsIndexModalOpen(true)}
         onOpenIssuerModal={() => setIsIssuerOpen(true)}
+        onOpenSentimentModal={() => setIsSentimentModalOpen(true)}
       />
       <main className="container mx-auto p-4">
         <Dashboard state={state} lang={lang} onSelectCoin={setSelectedCoin} />
@@ -172,6 +177,14 @@ export default function App() {
         <CoinIssuerModal
           onClose={() => setIsIssuerOpen(false)}
           onIssue={handleIssueCoin}
+          lang={lang}
+        />
+      )}
+      {isSentimentModalOpen && (
+        <SentimentModal
+          state={state}
+          onClose={() => setIsSentimentModalOpen(false)}
+          onSelectCoin={setSelectedCoin}
           lang={lang}
         />
       )}

@@ -49,6 +49,7 @@ export function CoinModal({ coin, onClose, lang, theme }: CoinModalProps) {
       circulating: '流通中',
       staked: '質押中',
       locked: '團隊鎖倉中',
+      sentiment: '市場看好度',
     },
     en: {
       info: 'Coin Info',
@@ -75,6 +76,7 @@ export function CoinModal({ coin, onClose, lang, theme }: CoinModalProps) {
       circulating: 'Circulating',
       staked: 'Staked',
       locked: 'Team Locked',
+      sentiment: 'Market Sentiment',
     }
   }[lang];
 
@@ -325,6 +327,16 @@ export function CoinModal({ coin, onClose, lang, theme }: CoinModalProps) {
                     <div className="text-xs text-slate-500 dark:text-slate-400 mb-1">{t.amplitude}</div>
                     <div className="font-mono font-medium text-slate-900 dark:text-white">
                       {amplitude.toFixed(2)}%
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400 mb-1">{t.sentiment}</div>
+                    <div className={`font-mono font-medium ${
+                      (coin.sentiment || 0) > 0 ? 'text-emerald-500' : 
+                      (coin.sentiment || 0) < 0 ? 'text-rose-500' : 
+                      'text-slate-500 dark:text-slate-400'
+                    }`}>
+                      {(coin.sentiment || 0) > 0 ? '+' : ''}{(coin.sentiment || 0).toFixed(1)}
                     </div>
                   </div>
                   <div className="pt-4 border-t border-slate-200 dark:border-slate-700">

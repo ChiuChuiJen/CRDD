@@ -117,34 +117,67 @@ export function tickSimulation(
   let indexChangeRatio = 0;
 
   const newCoins = state.coins.map(coin => {
-    let mu = coin.drift;
-    let sigma = coin.volatility;
+    const isTrading = !coin.tradingDate || newTime >= coin.tradingDate;
+    
+    let newPrice = coin.price;
+    let priceChangeRatio = 0;
+    let newVolume30d = coin.volume30d;
+    let newVolume24h = coin.volume24h || 0;
+    let newSentiment = coin.sentiment || 0;
 
-    // Apply active events
-    for (const ev of newEvents) {
-      if (!ev.targetCoinId || ev.targetCoinId === coin.id) {
-        // Event impact is spread over the day (144 ticks)
-        mu += ev.impact / dt / 144; 
+    if (isTrading) {
+      let mu = coin.drift;
+      let sigma = coin.volatility;
+
+      // Apply active events
+      for (const ev of newEvents) {
+        if (!ev.targetCoinId || ev.targetCoinId === coin.id) {
+          // Event impact is spread over the day (144 ticks)
+          mu += ev.impact / dt / 144; 
+          newSentiment += ev.impact * 10; // Events directly impact sentiment
+        }
+      }
+
+      // Stabilization mechanism (护盘/抛售)
+      // If price changes too much in a short time, revert mean
+      const dailyStartPrice = coin.dailyHistory.length > 0 ? coin.dailyHistory[coin.dailyHistory.length - 1].close : coin.initialPrice;
+      const dailyChange = (coin.price - dailyStartPrice) / dailyStartPrice;
+      
+      if (dailyChange > 0.2) {
+        // Too high, sell off
+        mu -= 0.5;
+      } else if (dailyChange < -0.2) {
+        // Too low, buy in
+        mu += 0.5;
+      }
+
+      newPrice = gbmStep(coin.price, mu, sigma, dt);
+      if (newPrice < 0.00000001) newPrice = 0.00000001; // Prevent negative or zero
+
+      priceChangeRatio = (newPrice - coin.price) / coin.price;
+
+      // Update sentiment based on price action and mean reversion
+      newSentiment -= newSentiment * 0.001; // Slow mean reversion to 0
+      newSentiment += priceChangeRatio * 100; // Price momentum impact
+      newSentiment += (Math.random() - 0.5) * 0.2; // Random noise
+      newSentiment = Math.max(-10, Math.min(10, newSentiment)); // Clamp between -10 and 10
+
+      // Simulate volume
+      if (coin.volume30d === 0) {
+        // Initial listing volume burst
+        newVolume30d = coin.marketCap * (0.02 + Math.random() * 0.08);
+        newVolume24h = newVolume30d * 0.1;
+      } else {
+        const tickVolume = coin.volume30d * (0.0001 + Math.random() * 0.0005);
+        newVolume30d = coin.volume30d + tickVolume - (coin.volume30d / 30 / 144); // Rough rolling window
+        
+        if (isNewDay) {
+          newVolume24h = tickVolume; // Reset 24h volume on new day
+        } else {
+          newVolume24h += tickVolume;
+        }
       }
     }
-
-    // Stabilization mechanism (护盘/抛售)
-    // If price changes too much in a short time, revert mean
-    const dailyStartPrice = coin.dailyHistory.length > 0 ? coin.dailyHistory[coin.dailyHistory.length - 1].close : coin.initialPrice;
-    const dailyChange = (coin.price - dailyStartPrice) / dailyStartPrice;
-    
-    if (dailyChange > 0.2) {
-      // Too high, sell off
-      mu -= 0.5;
-    } else if (dailyChange < -0.2) {
-      // Too low, buy in
-      mu += 0.5;
-    }
-
-    let newPrice = gbmStep(coin.price, mu, sigma, dt);
-    if (newPrice < 0.00000001) newPrice = 0.00000001; // Prevent negative or zero
-
-    const priceChangeRatio = (newPrice - coin.price) / coin.price;
 
     if (state.top50Ids.includes(coin.id)) {
       const weight = coin.volume30d / totalTop50Volume;
@@ -174,10 +207,6 @@ export function tickSimulation(
       dailyHistory[dailyHistory.length - 1] = last;
     }
 
-    // Simulate volume
-    const tickVolume = coin.volume30d * (0.0001 + Math.random() * 0.0005);
-    const newVolume30d = coin.volume30d + tickVolume - (coin.volume30d / 30 / 144); // Rough rolling window
-
     // Simulate circulation changes
     let { locked, staked, circulating } = coin.circulation;
     
@@ -206,8 +235,10 @@ export function tickSimulation(
       price: newPrice,
       history,
       dailyHistory,
+      volume24h: newVolume24h,
       volume30d: newVolume30d,
-      circulation: { locked, staked, circulating }
+      circulation: { locked, staked, circulating },
+      sentiment: newSentiment
     };
   });
 

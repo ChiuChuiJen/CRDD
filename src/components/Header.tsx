@@ -1,5 +1,6 @@
-import { Play, Pause, FastForward, SkipForward, Moon, Sun, Globe, RefreshCw, Activity, Plus } from 'lucide-react';
+import { Play, Pause, FastForward, SkipForward, Moon, Sun, Globe, RefreshCw, Activity, Plus, BarChart2 } from 'lucide-react';
 import { SimulationState } from '../lib/simulation';
+import { Coin } from '../data/parser';
 
 interface HeaderProps {
   state: SimulationState;
@@ -16,15 +17,17 @@ interface HeaderProps {
   setTheme: (v: 'dark' | 'light') => void;
   onOpenIndexModal: () => void;
   onOpenIssuerModal: () => void;
+  onOpenSentimentModal: () => void;
 }
 
 export function Header({
-  state, isRunning, setIsRunning, speed, setSpeed, handleNextDay, isAuto, setIsAuto, lang, setLang, theme, setTheme, onOpenIndexModal, onOpenIssuerModal
+  state, isRunning, setIsRunning, speed, setSpeed, handleNextDay, isAuto, setIsAuto, lang, setLang, theme, setTheme, onOpenIndexModal, onOpenIssuerModal, onOpenSentimentModal
 }: HeaderProps) {
   const t = {
     zh: {
       title: 'CR虛擬貨幣交易所',
       index: '加權指數',
+      sentiment: '市場情緒',
       start: '開始模擬',
       pause: '暫停',
       speed: '速度倍率',
@@ -35,6 +38,7 @@ export function Header({
     en: {
       title: 'CR Crypto Exchange',
       index: 'Weighted Index',
+      sentiment: 'Market Sentiment',
       start: 'Start Sim',
       pause: 'Pause',
       speed: 'Speed',
@@ -50,6 +54,12 @@ export function Header({
     : 10000;
   const indexChange = state.indexValue - indexStartValue;
   const indexChangePercent = (indexChange / indexStartValue) * 100;
+
+  const bullishCoins = state.coins.filter(c => (c.sentiment || 0) > 0.5);
+  const bearishCoins = state.coins.filter(c => (c.sentiment || 0) < -0.5);
+  const neutralCoins = state.coins.filter(c => (c.sentiment || 0) >= -0.5 && (c.sentiment || 0) <= 0.5);
+
+  const avgSentiment = (coins: Coin[]) => coins.length ? (coins.reduce((sum, c) => sum + (c.sentiment || 0), 0) / coins.length).toFixed(1) : '0.0';
 
   return (
     <header className="sticky top-0 z-40 w-full backdrop-blur flex-none transition-colors duration-500 lg:z-50 lg:border-b lg:border-slate-900/10 dark:border-slate-50/[0.06] bg-white/95 supports-backdrop-blur:bg-white/60 dark:bg-transparent">
@@ -74,7 +84,31 @@ export function Header({
                   </span>
                 </div>
               </div>
-              <div className="hidden md:flex flex-col">
+              
+              <div 
+                className="hidden lg:flex flex-col cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/50 p-2 -m-2 rounded-lg transition-colors"
+                onClick={onOpenSentimentModal}
+              >
+                <span className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1 mb-1">
+                  {t.sentiment} <BarChart2 size={12} className="text-indigo-500" />
+                </span>
+                <div className="flex items-center gap-3 text-xs font-mono">
+                  <div className="flex flex-col items-center leading-tight">
+                    <span className="text-emerald-500 font-semibold">{bullishCoins.length}</span>
+                    <span className="text-emerald-500/70 text-[10px]">+{avgSentiment(bullishCoins)}</span>
+                  </div>
+                  <div className="flex flex-col items-center leading-tight">
+                    <span className="text-slate-500 font-semibold">{neutralCoins.length}</span>
+                    <span className="text-slate-500/70 text-[10px]">{avgSentiment(neutralCoins)}</span>
+                  </div>
+                  <div className="flex flex-col items-center leading-tight">
+                    <span className="text-rose-500 font-semibold">{bearishCoins.length}</span>
+                    <span className="text-rose-500/70 text-[10px]">{avgSentiment(bearishCoins)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="hidden xl:flex flex-col">
                 <span className="text-xs text-slate-500 dark:text-slate-400">Time</span>
                 <span className="text-sm font-mono">{date.toLocaleString()}</span>
               </div>

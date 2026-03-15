@@ -10,6 +10,7 @@ export interface Coin {
   totalSupply: number;
   marketCap: number;
   description: string;
+  volume24h: number;
   volume30d: number;
   history: { time: number; price: number }[];
   dailyHistory: { date: number; open: number; high: number; low: number; close: number }[];
@@ -24,6 +25,7 @@ export interface Coin {
     staked: number;      // 質押中 (%)
     locked: number;      // 團隊鎖倉中 (%)
   };
+  sentiment: number; // -10 to 10
   volatility: number; // sigma
   drift: number; // mu
   tradingDate?: number;
@@ -76,6 +78,7 @@ export function parseCoins(): Coin[] {
       totalSupply,
       marketCap,
       description,
+      volume24h: Math.random() * marketCap * 0.01, // Random initial 24h volume
       volume30d: Math.random() * marketCap * 0.1, // Random initial volume
       history: [{ time: Date.now(), price }],
       dailyHistory: [],
@@ -90,6 +93,7 @@ export function parseCoins(): Coin[] {
         staked,
         locked
       },
+      sentiment: (Math.random() - 0.5) * 10, // -5 to 5 initial sentiment
       volatility: Math.random() * 0.05 + 0.01, // 1% to 6% base volatility
       drift: (Math.random() - 0.5) * 0.001 // Slight drift
     };

@@ -9,7 +9,7 @@ interface DashboardProps {
   onSelectCoin: (coin: Coin) => void;
 }
 
-type SortColumn = 'coin' | 'price' | 'change' | 'volume' | 'status';
+type SortColumn = 'coin' | 'price' | 'change' | 'volume' | 'volume24h' | 'status';
 type SortDirection = 'asc' | 'desc';
 
 export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
@@ -24,6 +24,7 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
       price: '最新價',
       change: '漲跌幅',
       vol: '成交量',
+      vol24h: '當日成交量',
       upcoming: '即將上市',
       days: '天',
     },
@@ -34,6 +35,7 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
       price: 'Price',
       change: 'Change',
       vol: 'Volume',
+      vol24h: '24h Volume',
       upcoming: 'Upcoming',
       days: 'd',
     }
@@ -82,6 +84,10 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
       case 'volume':
         aValue = a.volume30d;
         bValue = b.volume30d;
+        break;
+      case 'volume24h':
+        aValue = a.volume24h || 0;
+        bValue = b.volume24h || 0;
         break;
       case 'status':
         if (!a.isTrading && b.isTrading) aValue = -1;
@@ -142,6 +148,12 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
                   </th>
                   <th 
                     className="px-6 py-4 font-medium cursor-pointer group hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                    onClick={() => handleSort('volume24h')}
+                  >
+                    <div className="flex items-center justify-end gap-1">{t.vol24h} <SortIcon column="volume24h" /></div>
+                  </th>
+                  <th 
+                    className="px-6 py-4 font-medium cursor-pointer group hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                     onClick={() => handleSort('status')}
                   >
                     <div className="flex items-center justify-center gap-1">STATUS <SortIcon column="status" /></div>
@@ -186,6 +198,9 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-slate-500 dark:text-slate-400 font-mono">
                         {coin.isTrading ? `${(coin.volume30d / 1000000).toFixed(2)}M` : '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-slate-500 dark:text-slate-400 font-mono">
+                        {coin.isTrading ? `${((coin.volume24h || 0) / 1000000).toFixed(2)}M` : '-'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-center">
                         {!coin.isTrading ? (
