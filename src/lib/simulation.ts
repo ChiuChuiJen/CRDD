@@ -178,12 +178,36 @@ export function tickSimulation(
     const tickVolume = coin.volume30d * (0.0001 + Math.random() * 0.0005);
     const newVolume30d = coin.volume30d + tickVolume - (coin.volume30d / 30 / 144); // Rough rolling window
 
+    // Simulate circulation changes
+    let { locked, staked, circulating } = coin.circulation;
+    
+    if (locked > 0) {
+      const unlockAmount = locked * (Math.random() * 0.0001);
+      locked -= unlockAmount;
+      circulating += unlockAmount;
+    }
+
+    const stakingChange = (Math.random() - 0.5) * 0.01;
+    if (stakingChange > 0 && circulating > stakingChange) {
+      circulating -= stakingChange;
+      staked += stakingChange;
+    } else if (stakingChange < 0 && staked > Math.abs(stakingChange)) {
+      staked += stakingChange;
+      circulating -= stakingChange;
+    }
+
+    const totalCirculation = locked + staked + circulating;
+    locked = (locked / totalCirculation) * 100;
+    staked = (staked / totalCirculation) * 100;
+    circulating = (circulating / totalCirculation) * 100;
+
     return {
       ...coin,
       price: newPrice,
       history,
       dailyHistory,
-      volume30d: newVolume30d
+      volume30d: newVolume30d,
+      circulation: { locked, staked, circulating }
     };
   });
 

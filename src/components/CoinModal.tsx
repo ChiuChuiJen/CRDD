@@ -1,4 +1,4 @@
-import { X, TrendingUp, TrendingDown, Users, Activity, Info, BarChart2, List } from 'lucide-react';
+import { X, TrendingUp, TrendingDown, Users, Activity, Info, BarChart2, List, PieChart } from 'lucide-react';
 import { Coin } from '../data/parser';
 import {
   LineChart,
@@ -43,6 +43,12 @@ export function CoinModal({ coin, onClose, lang, theme }: CoinModalProps) {
       intradayData: '時分明細',
       time: '時間',
       change: '漲跌幅',
+      upcoming: '即將上市',
+      days: '天',
+      circulation: '市場流通狀況',
+      circulating: '流通中',
+      staked: '質押中',
+      locked: '團隊鎖倉中',
     },
     en: {
       info: 'Coin Info',
@@ -63,6 +69,12 @@ export function CoinModal({ coin, onClose, lang, theme }: CoinModalProps) {
       intradayData: 'Intraday Data',
       time: 'Time',
       change: 'Change',
+      upcoming: 'Upcoming',
+      days: 'd',
+      circulation: 'Circulation Status',
+      circulating: 'Circulating',
+      staked: 'Staked',
+      locked: 'Team Locked',
     }
   }[lang];
 
@@ -77,11 +89,21 @@ export function CoinModal({ coin, onClose, lang, theme }: CoinModalProps) {
   const low = coin.dailyHistory.length > 0 ? coin.dailyHistory[coin.dailyHistory.length - 1].low : coin.price;
   const amplitude = ((high - low) / startPrice) * 100;
 
+  const currentTime = coin.history.length > 0 ? coin.history[coin.history.length - 1].time : Date.now();
+  const isTrading = !coin.tradingDate || currentTime >= coin.tradingDate;
+  const daysUntilTrading = coin.tradingDate ? Math.ceil((coin.tradingDate - currentTime) / (24 * 60 * 60 * 1000)) : 0;
+
   const chipData = [
     { name: t.foreign, value: coin.chipDistribution.foreign, color: '#3b82f6' },
     { name: t.institution, value: coin.chipDistribution.institution, color: '#8b5cf6' },
     { name: t.large, value: coin.chipDistribution.largeHolder, color: '#f59e0b' },
     { name: t.retail, value: coin.chipDistribution.retail, color: '#10b981' },
+  ];
+
+  const circulationData = [
+    { name: t.circulating, value: coin.circulation?.circulating || 100, color: '#10b981' },
+    { name: t.staked, value: coin.circulation?.staked || 0, color: '#f59e0b' },
+    { name: t.locked, value: coin.circulation?.locked || 0, color: '#64748b' }
   ];
 
   const formatTime = (time: number) => {
@@ -111,15 +133,22 @@ export function CoinModal({ coin, onClose, lang, theme }: CoinModalProps) {
                 <span className="text-sm font-medium px-2.5 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
                   {coin.symbol}
                 </span>
+                {!isTrading && (
+                  <span className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/50">
+                    {t.upcoming} {daysUntilTrading > 0 ? `(${daysUntilTrading}${t.days})` : ''}
+                  </span>
+                )}
               </h2>
               <div className="flex items-center gap-4 mt-1">
                 <span className="font-mono text-xl font-semibold text-slate-900 dark:text-white">
                   {coin.price < 0.01 ? coin.price.toFixed(8) : coin.price.toFixed(4)} CRDT
                 </span>
-                <span className={`flex items-center font-medium ${isUp ? 'text-emerald-500' : 'text-rose-500'}`}>
-                  {isUp ? <TrendingUp size={18} className="mr-1" /> : <TrendingDown size={18} className="mr-1" />}
-                  {Math.abs(change * 100).toFixed(2)}%
-                </span>
+                {isTrading && (
+                  <span className={`flex items-center font-medium ${isUp ? 'text-emerald-500' : 'text-rose-500'}`}>
+                    {isUp ? <TrendingUp size={18} className="mr-1" /> : <TrendingDown size={18} className="mr-1" />}
+                    {Math.abs(change * 100).toFixed(2)}%
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -327,6 +356,37 @@ export function CoinModal({ coin, onClose, lang, theme }: CoinModalProps) {
                       </div>
                     </div>
                   ))}
+                </div>
+              </div>
+
+              {/* Circulation Status */}
+              <div className="bg-slate-50 dark:bg-slate-800/30 rounded-xl p-5 border border-slate-200 dark:border-slate-800">
+                <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+                  <PieChart size={16} /> {t.circulation}
+                </h3>
+                <div className="space-y-4">
+                  {circulationData.map((circ, i) => {
+                    const amount = (coin.totalSupply * (circ.value / 100));
+                    return (
+                      <div key={i}>
+                        <div className="flex justify-between text-sm mb-1">
+                          <span className="text-slate-600 dark:text-slate-300 font-medium">{circ.name}</span>
+                          <div className="text-right">
+                            <span className="font-mono text-slate-900 dark:text-white block">{circ.value.toFixed(1)}%</span>
+                            <span className="font-mono text-xs text-slate-500 dark:text-slate-400">
+                              {(amount / 1000000).toFixed(2)}M
+                            </span>
+                          </div>
+                        </div>
+                        <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
+                          <div 
+                            className="h-2 rounded-full" 
+                            style={{ width: `${circ.value}%`, backgroundColor: circ.color }}
+                          ></div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 

@@ -5,6 +5,7 @@ import { Header } from './components/Header';
 import { Dashboard } from './components/Dashboard';
 import { CoinModal } from './components/CoinModal';
 import { IndexModal } from './components/IndexModal';
+import { CoinIssuerModal } from './components/CoinIssuerModal';
 
 export default function App() {
   const [state, setState] = useState<SimulationState | null>(null);
@@ -18,6 +19,7 @@ export default function App() {
   
   const [selectedCoin, setSelectedCoin] = useState<Coin | null>(null);
   const [isIndexModalOpen, setIsIndexModalOpen] = useState(false);
+  const [isIssuerOpen, setIsIssuerOpen] = useState(false);
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -79,6 +81,54 @@ export default function App() {
     setState(nextState);
   };
 
+  const handleIssueCoin = (data: any) => {
+    if (!state) return;
+    const now = state.currentTime;
+    const tradingDate = now + 2 * 24 * 60 * 60 * 1000; // 2 days later
+    
+    const newCoin: Coin = {
+      id: data.symbol,
+      name: data.name,
+      symbol: data.symbol,
+      initialPrice: data.initialPrice,
+      price: data.initialPrice,
+      totalSupply: data.totalSupply,
+      marketCap: data.initialPrice * data.totalSupply,
+      description: data.description,
+      volume30d: 0,
+      history: [{ time: now, price: data.initialPrice }],
+      dailyHistory: [{ date: now, open: data.initialPrice, high: data.initialPrice, low: data.initialPrice, close: data.initialPrice }],
+      chipDistribution: {
+        foreign: Math.random() * 40 + 10,
+        institution: Math.random() * 30 + 10,
+        largeHolder: Math.random() * 20 + 5,
+        retail: 100 - (Math.random() * 40 + 10) - (Math.random() * 30 + 10) - (Math.random() * 20 + 5) // Simplified
+      },
+      circulation: {
+        locked: Math.random() * 30 + 10,
+        staked: Math.random() * 40 + 10,
+        circulating: 0 // Will be calculated
+      },
+      volatility: Math.random() * 0.05 + 0.01,
+      drift: (Math.random() - 0.5) * 0.001,
+      issueDate: now,
+      tradingDate: tradingDate
+    };
+
+    // Fix retail calculation
+    newCoin.chipDistribution.retail = 100 - newCoin.chipDistribution.foreign - newCoin.chipDistribution.institution - newCoin.chipDistribution.largeHolder;
+    newCoin.circulation.circulating = 100 - newCoin.circulation.locked - newCoin.circulation.staked;
+
+    setState(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        coins: [...prev.coins, newCoin]
+      };
+    });
+    setIsIssuerOpen(false);
+  };
+
   if (!state) return <div className="flex items-center justify-center h-screen bg-gray-900 text-white">Loading...</div>;
 
   return (
@@ -97,6 +147,7 @@ export default function App() {
         theme={theme}
         setTheme={setTheme}
         onOpenIndexModal={() => setIsIndexModalOpen(true)}
+        onOpenIssuerModal={() => setIsIssuerOpen(true)}
       />
       <main className="container mx-auto p-4">
         <Dashboard state={state} lang={lang} onSelectCoin={setSelectedCoin} />
@@ -115,6 +166,13 @@ export default function App() {
           onClose={() => setIsIndexModalOpen(false)}
           lang={lang}
           theme={theme}
+        />
+      )}
+      {isIssuerOpen && (
+        <CoinIssuerModal
+          onClose={() => setIsIssuerOpen(false)}
+          onIssue={handleIssueCoin}
+          lang={lang}
         />
       )}
     </div>

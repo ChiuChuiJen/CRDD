@@ -19,8 +19,15 @@ export interface Coin {
     largeHolder: number;
     retail: number;
   };
+  circulation: {
+    circulating: number; // 流通中 (%)
+    staked: number;      // 質押中 (%)
+    locked: number;      // 團隊鎖倉中 (%)
+  };
   volatility: number; // sigma
   drift: number; // mu
+  tradingDate?: number;
+  issueDate?: number;
 }
 
 export interface MarketEvent {
@@ -55,6 +62,11 @@ export function parseCoins(): Coin[] {
     const largeHolder = Math.random() * 20 + 5;
     const retail = 100 - foreign - institution - largeHolder;
 
+    // Generate random initial circulation distribution
+    const locked = Math.random() * 30 + 10; // 10% to 40% locked
+    const staked = Math.random() * 40 + 10; // 10% to 50% staked
+    const circulating = 100 - locked - staked;
+
     return {
       id: symbol,
       name: namePart,
@@ -72,6 +84,11 @@ export function parseCoins(): Coin[] {
         institution,
         largeHolder,
         retail
+      },
+      circulation: {
+        circulating,
+        staked,
+        locked
       },
       volatility: Math.random() * 0.05 + 0.01, // 1% to 6% base volatility
       drift: (Math.random() - 0.5) * 0.001 // Slight drift

@@ -1,4 +1,4 @@
-import { Play, Pause, FastForward, SkipForward, Moon, Sun, Globe, RefreshCw, Activity } from 'lucide-react';
+import { Play, Pause, FastForward, SkipForward, Moon, Sun, Globe, RefreshCw, Activity, Plus } from 'lucide-react';
 import { SimulationState } from '../lib/simulation';
 
 interface HeaderProps {
@@ -15,10 +15,11 @@ interface HeaderProps {
   theme: 'dark' | 'light';
   setTheme: (v: 'dark' | 'light') => void;
   onOpenIndexModal: () => void;
+  onOpenIssuerModal: () => void;
 }
 
 export function Header({
-  state, isRunning, setIsRunning, speed, setSpeed, handleNextDay, isAuto, setIsAuto, lang, setLang, theme, setTheme, onOpenIndexModal
+  state, isRunning, setIsRunning, speed, setSpeed, handleNextDay, isAuto, setIsAuto, lang, setLang, theme, setTheme, onOpenIndexModal, onOpenIssuerModal
 }: HeaderProps) {
   const t = {
     zh: {
@@ -29,6 +30,7 @@ export function Header({
       speed: '速度倍率',
       nextDay: '下一日',
       auto: '自動進程',
+      issue: '發行貨幣',
     },
     en: {
       title: 'CR Crypto Exchange',
@@ -38,6 +40,7 @@ export function Header({
       speed: 'Speed',
       nextDay: 'Next Day',
       auto: 'Auto Next',
+      issue: 'Issue Coin',
     }
   }[lang];
 
@@ -112,6 +115,14 @@ export function Header({
               >
                 <RefreshCw size={16} className={isAuto ? 'animate-spin' : ''} />
                 <span className="hidden sm:inline">{t.auto}</span>
+              </button>
+
+              <button 
+                onClick={onOpenIssuerModal}
+                className="flex items-center gap-1 px-3 py-1.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-md text-sm font-medium transition-colors"
+              >
+                <Plus size={16} />
+                <span className="hidden sm:inline">{t.issue}</span>
               </button>
 
               <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1"></div>

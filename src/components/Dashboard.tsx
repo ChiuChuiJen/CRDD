@@ -24,6 +24,8 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
       price: '最新價',
       change: '漲跌幅',
       vol: '成交量',
+      upcoming: '即將上市',
+      days: '天',
     },
     en: {
       coins: 'Market',
@@ -32,6 +34,8 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
       price: 'Price',
       change: 'Change',
       vol: 'Volume',
+      upcoming: 'Upcoming',
+      days: 'd',
     }
   }[lang];
 
@@ -53,7 +57,9 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
     const isTop50 = state.top50Ids.includes(coin.id);
     const startPrice = coin.dailyHistory.length > 0 ? coin.dailyHistory[coin.dailyHistory.length - 1].open : coin.initialPrice;
     const change = (coin.price - startPrice) / startPrice;
-    return { ...coin, isTop50, change };
+    const isTrading = !coin.tradingDate || state.currentTime >= coin.tradingDate;
+    const daysUntilTrading = coin.tradingDate ? Math.ceil((coin.tradingDate - state.currentTime) / (24 * 60 * 60 * 1000)) : 0;
+    return { ...coin, isTop50, change, isTrading, daysUntilTrading };
   });
 
   const sortedCoins = [...coinsWithStats].sort((a, b) => {
@@ -78,8 +84,12 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
         bValue = b.volume30d;
         break;
       case 'status':
-        aValue = a.isTop50 ? 1 : 0;
-        bValue = b.isTop50 ? 1 : 0;
+        if (!a.isTrading && b.isTrading) aValue = -1;
+        else if (a.isTrading && !b.isTrading) aValue = 1;
+        else {
+          aValue = a.isTop50 ? 1 : 0;
+          bValue = b.isTop50 ? 1 : 0;
+        }
         break;
     }
 
@@ -165,20 +175,28 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
                         {coin.price < 0.01 ? coin.price.toFixed(8) : coin.price.toFixed(4)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right">
-                        <div className={`inline-flex items-center gap-1 font-medium ${isUp ? 'text-emerald-500' : 'text-rose-500'}`}>
-                          {isUp ? <ArrowUpRight size={16} /> : <ArrowDownRight size={16} />}
-                          {Math.abs(coin.change * 100).toFixed(2)}%
-                        </div>
+                        {coin.isTrading ? (
+                          <div className={`inline-flex items-center gap-1 font-medium ${isUp ? 'text-emerald-500' : 'text-rose-500'}`}>
+                            {isUp ? <ArrowUpRight size={16} /> : <ArrowDownRight size={16} />}
+                            {Math.abs(coin.change * 100).toFixed(2)}%
+                          </div>
+                        ) : (
+                          <span className="text-slate-400">-</span>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-slate-500 dark:text-slate-400 font-mono">
-                        {(coin.volume30d / 1000000).toFixed(2)}M
+                        {coin.isTrading ? `${(coin.volume30d / 1000000).toFixed(2)}M` : '-'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-center">
-                        {coin.isTop50 && (
+                        {!coin.isTrading ? (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/50">
+                            {t.upcoming} {coin.daysUntilTrading > 0 ? `(${coin.daysUntilTrading}${t.days})` : ''}
+                          </span>
+                        ) : coin.isTop50 ? (
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 border border-amber-200 dark:border-amber-800/50">
                             Top 50
                           </span>
-                        )}
+                        ) : null}
                       </td>
                     </tr>
                   );
