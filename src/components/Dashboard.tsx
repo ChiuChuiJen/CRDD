@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { SimulationState } from '../lib/simulation';
 import { Coin } from '../data/parser';
 import { ArrowUpRight, ArrowDownRight, Activity, ChevronUp, ChevronDown, ArrowUpDown } from 'lucide-react';
+import { formatLargeNumber } from '../lib/format';
 
 interface DashboardProps {
   state: SimulationState;
@@ -15,10 +16,12 @@ type SortDirection = 'asc' | 'desc';
 export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
   const [sortColumn, setSortColumn] = useState<SortColumn>('coin');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [activeTab, setActiveTab] = useState<'all' | 'etf'>('all');
 
   const t = {
     zh: {
       coins: '市場行情',
+      etfs: 'ETF',
       news: '公告及新聞',
       top50: '權值股 (Top 50)',
       price: '最新價',
@@ -30,6 +33,7 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
     },
     en: {
       coins: 'Market',
+      etfs: 'ETFs',
       news: 'News & Announcements',
       top50: 'Weighted (Top 50)',
       price: 'Price',
@@ -55,8 +59,10 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
     return sortDirection === 'asc' ? <ChevronUp size={14} className="text-indigo-500" /> : <ChevronDown size={14} className="text-indigo-500" />;
   };
 
-  const coinsWithStats = state.coins.map(coin => {
-    const isTop50 = state.top50Ids.includes(coin.id);
+  const coinsWithStats = state.coins
+    .filter(coin => activeTab === 'etf' ? coin.isETF : !coin.isETF)
+    .map(coin => {
+      const isTop50 = state.top50Ids.includes(coin.id);
     const startPrice = coin.dailyHistory.length > 0 ? coin.dailyHistory[coin.dailyHistory.length - 1].open : coin.initialPrice;
     const change = (coin.price - startPrice) / startPrice;
     const isTrading = !coin.tradingDate || state.currentTime >= coin.tradingDate;
@@ -108,12 +114,36 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
     <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mt-6">
       <div className="lg:col-span-3 space-y-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-            <Activity className="text-indigo-500" />
-            {t.coins}
-          </h2>
+          <div className="flex items-center gap-4">
+            <h2 className="text-2xl font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+              <Activity className="text-indigo-500" />
+              {t.coins}
+            </h2>
+            <div className="flex bg-slate-100 dark:bg-slate-800 rounded-lg p-1">
+              <button
+                onClick={() => setActiveTab('all')}
+                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                  activeTab === 'all'
+                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+                }`}
+              >
+                {t.coins}
+              </button>
+              <button
+                onClick={() => setActiveTab('etf')}
+                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                  activeTab === 'etf'
+                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+                }`}
+              >
+                {t.etfs}
+              </button>
+            </div>
+          </div>
           <div className="text-sm text-slate-500 dark:text-slate-400">
-            {state.coins.length} Coins Listed
+            {coinsWithStats.length} {activeTab === 'etf' ? 'ETFs' : 'Coins'} Listed
           </div>
         </div>
 
@@ -197,10 +227,10 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-slate-500 dark:text-slate-400 font-mono">
-                        {coin.isTrading ? `${(coin.volume30d / 1000000).toFixed(2)}M` : '-'}
+                        {coin.isTrading ? formatLargeNumber(coin.volume30d) : '-'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-slate-500 dark:text-slate-400 font-mono">
-                        {coin.isTrading ? `${((coin.volume24h || 0) / 1000000).toFixed(2)}M` : '-'}
+                        {coin.isTrading ? formatLargeNumber(coin.volume24h || 0) : '-'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-center">
                         {!coin.isTrading ? (

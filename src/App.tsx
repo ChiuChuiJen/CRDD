@@ -12,7 +12,7 @@ export default function App() {
   const [state, setState] = useState<SimulationState | null>(null);
   const [events, setEvents] = useState<{ eventsA: MarketEvent[], eventsB: MarketEvent[], impacts: ImpactLevel[] } | null>(null);
   
-  const [isRunning, setIsRunning] = useState(false);
+  const [isRunning, setIsRunning] = useState(true); // Always true now
   const [speed, setSpeed] = useState(1);
   const [isAuto, setIsAuto] = useState(false);
   const [lang, setLang] = useState<'zh' | 'en'>('zh');
@@ -125,7 +125,9 @@ export default function App() {
       hurst: Math.random() * 0.4 + 0.3,
       lastNoise: 0,
       issueDate: now,
-      tradingDate: tradingDate
+      tradingDate: tradingDate,
+      isETF: data.isETF,
+      components: data.components
     };
 
     // Fix retail calculation
@@ -148,8 +150,6 @@ export default function App() {
     <div className={`min-h-screen transition-colors duration-300 ${theme === 'dark' ? 'bg-gray-950 text-gray-100' : 'bg-gray-50 text-gray-900'}`}>
       <Header 
         state={state} 
-        isRunning={isRunning} 
-        setIsRunning={setIsRunning} 
         speed={speed} 
         setSpeed={setSpeed} 
         handleNextDay={handleNextDay}
@@ -169,6 +169,7 @@ export default function App() {
       {selectedCoin && (
         <CoinModal 
           coin={state.coins.find(c => c.id === selectedCoin.id) || selectedCoin} 
+          state={state}
           onClose={() => setSelectedCoin(null)} 
           lang={lang} 
           theme={theme}
@@ -184,6 +185,7 @@ export default function App() {
       )}
       {isIssuerOpen && (
         <CoinIssuerModal
+          state={state}
           onClose={() => setIsIssuerOpen(false)}
           onIssue={handleIssueCoin}
           lang={lang}

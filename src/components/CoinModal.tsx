@@ -1,5 +1,6 @@
 import { X, TrendingUp, TrendingDown, Users, Activity, Info, BarChart2, List, PieChart } from 'lucide-react';
 import { Coin } from '../data/parser';
+import { formatLargeNumber } from '../lib/format';
 import {
   LineChart,
   Line,
@@ -15,14 +16,17 @@ import {
   Cell
 } from 'recharts';
 
+import { SimulationState } from '../lib/simulation';
+
 interface CoinModalProps {
   coin: Coin;
+  state: SimulationState;
   onClose: () => void;
   lang: 'zh' | 'en';
   theme: 'dark' | 'light';
 }
 
-export function CoinModal({ coin, onClose, lang, theme }: CoinModalProps) {
+export function CoinModal({ coin, state, onClose, lang, theme }: CoinModalProps) {
   const t = {
     zh: {
       info: '貨幣資訊',
@@ -320,7 +324,7 @@ export function CoinModal({ coin, onClose, lang, theme }: CoinModalProps) {
                   <div>
                     <div className="text-xs text-slate-500 dark:text-slate-400 mb-1">{t.supply}</div>
                     <div className="font-mono font-medium text-slate-900 dark:text-white">
-                      {(coin.totalSupply / 1000000).toFixed(2)} M
+                      {formatLargeNumber(coin.totalSupply)}
                     </div>
                   </div>
                   <div>
@@ -347,6 +351,40 @@ export function CoinModal({ coin, onClose, lang, theme }: CoinModalProps) {
                   </div>
                 </div>
               </div>
+
+              {/* ETF Components */}
+              {coin.isETF && coin.components && coin.components.length > 0 && (
+                <div className="bg-slate-50 dark:bg-slate-800/30 rounded-xl p-5 border border-slate-200 dark:border-slate-800">
+                  <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+                    <List size={16} /> {lang === 'zh' ? 'ETF成分' : 'ETF Components'}
+                  </h3>
+                  <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2">
+                    {coin.components.map(compId => {
+                      const compCoin = state.coins.find(c => c.id === compId);
+                      if (!compCoin) return null;
+                      const compStartPrice = compCoin.dailyHistory.length > 0 ? compCoin.dailyHistory[compCoin.dailyHistory.length - 1].open : compCoin.initialPrice;
+                      const compChange = (compCoin.price - compStartPrice) / compStartPrice;
+                      const isCompUp = compChange >= 0;
+                      return (
+                        <div key={compId} className="flex justify-between items-center bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+                          <div>
+                            <div className="font-medium text-slate-900 dark:text-white">{compCoin.symbol}</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400">{compCoin.name}</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-mono font-medium text-slate-900 dark:text-white">
+                              {compCoin.price < 0.01 ? compCoin.price.toFixed(8) : compCoin.price.toFixed(4)}
+                            </div>
+                            <div className={`font-mono text-xs ${isCompUp ? 'text-emerald-500' : 'text-rose-500'}`}>
+                              {isCompUp ? '+' : ''}{(compChange * 100).toFixed(2)}%
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Chip Distribution */}
               <div className="bg-slate-50 dark:bg-slate-800/30 rounded-xl p-5 border border-slate-200 dark:border-slate-800">
@@ -386,7 +424,7 @@ export function CoinModal({ coin, onClose, lang, theme }: CoinModalProps) {
                           <div className="text-right">
                             <span className="font-mono text-slate-900 dark:text-white block">{circ.value.toFixed(1)}%</span>
                             <span className="font-mono text-xs text-slate-500 dark:text-slate-400">
-                              {(amount / 1000000).toFixed(2)}M
+                              {formatLargeNumber(amount)}
                             </span>
                           </div>
                         </div>

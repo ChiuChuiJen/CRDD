@@ -1,11 +1,9 @@
-import { Play, Pause, FastForward, SkipForward, Moon, Sun, Globe, RefreshCw, Activity, Plus, BarChart2 } from 'lucide-react';
+import { FastForward, SkipForward, Moon, Sun, Globe, RefreshCw, Activity, Plus, BarChart2 } from 'lucide-react';
 import { SimulationState } from '../lib/simulation';
 import { Coin } from '../data/parser';
 
 interface HeaderProps {
   state: SimulationState;
-  isRunning: boolean;
-  setIsRunning: (v: boolean) => void;
   speed: number;
   setSpeed: (v: number) => void;
   handleNextDay: () => void;
@@ -21,15 +19,13 @@ interface HeaderProps {
 }
 
 export function Header({
-  state, isRunning, setIsRunning, speed, setSpeed, handleNextDay, isAuto, setIsAuto, lang, setLang, theme, setTheme, onOpenIndexModal, onOpenIssuerModal, onOpenSentimentModal
+  state, speed, setSpeed, handleNextDay, isAuto, setIsAuto, lang, setLang, theme, setTheme, onOpenIndexModal, onOpenIssuerModal, onOpenSentimentModal
 }: HeaderProps) {
   const t = {
     zh: {
       title: 'CR虛擬貨幣交易所',
       index: '加權指數',
       sentiment: '市場情緒',
-      start: '開始模擬',
-      pause: '暫停',
       speed: '速度倍率',
       nextDay: '下一日',
       auto: '自動進程',
@@ -39,8 +35,6 @@ export function Header({
       title: 'CR Crypto Exchange',
       index: 'Weighted Index',
       sentiment: 'Market Sentiment',
-      start: 'Start Sim',
-      pause: 'Pause',
       speed: 'Speed',
       nextDay: 'Next Day',
       auto: 'Auto Next',
@@ -115,14 +109,6 @@ export function Header({
             </div>
 
             <div className="flex items-center gap-3">
-              <button 
-                onClick={() => setIsRunning(!isRunning)}
-                className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${isRunning ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400' : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'}`}
-              >
-                {isRunning ? <Pause size={16} /> : <Play size={16} />}
-                <span className="hidden sm:inline">{isRunning ? t.pause : t.start}</span>
-              </button>
-
               <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 rounded-md p-1">
                 {[1, 2, 5, 10].map(s => (
                   <button

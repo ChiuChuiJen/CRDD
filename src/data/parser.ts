@@ -39,6 +39,8 @@ export interface Coin {
   lastNoise: number; // For Hurst approximation
   tradingDate?: number;
   issueDate?: number;
+  isETF?: boolean;
+  components?: string[];
 }
 
 export interface MarketEvent {

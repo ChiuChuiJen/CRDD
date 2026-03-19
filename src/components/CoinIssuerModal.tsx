@@ -1,56 +1,77 @@
 import { useState } from 'react';
-import { X, Plus } from 'lucide-react';
+import { X, Plus, Check } from 'lucide-react';
+import { SimulationState } from '../lib/simulation';
 
 interface CoinIssuerModalProps {
+  state: SimulationState;
   onClose: () => void;
   onIssue: (data: any) => void;
   lang: 'zh' | 'en';
 }
 
-export function CoinIssuerModal({ onClose, onIssue, lang }: CoinIssuerModalProps) {
+export function CoinIssuerModal({ state, onClose, onIssue, lang }: CoinIssuerModalProps) {
   const [name, setName] = useState('');
   const [symbol, setSymbol] = useState('');
   const [initialPrice, setInitialPrice] = useState('');
   const [totalSupply, setTotalSupply] = useState('');
   const [description, setDescription] = useState('');
+  const [isETF, setIsETF] = useState(false);
+  const [selectedComponents, setSelectedComponents] = useState<string[]>([]);
 
   const t = {
     zh: {
-      title: '發行新貨幣',
-      name: '貨幣名稱',
+      title: '發行新貨幣 / ETF',
+      name: '名稱',
       symbol: '代號',
       price: '初始價格 (CRDT)',
       supply: '發行量',
-      desc: '貨幣介紹',
+      desc: '介紹',
+      isETF: '這是一檔 ETF',
+      components: '選擇成分幣',
       submit: '確認發行',
       cancel: '取消',
-      note: '註：新貨幣將於發行日後 2 天正式上市交易。'
+      note: '註：新貨幣/ETF將於發行日後 2 天正式上市交易。'
     },
     en: {
-      title: 'Issue New Coin',
-      name: 'Coin Name',
+      title: 'Issue New Coin / ETF',
+      name: 'Name',
       symbol: 'Symbol',
       price: 'Initial Price (CRDT)',
       supply: 'Total Supply',
       desc: 'Description',
-      submit: 'Issue Coin',
+      isETF: 'This is an ETF',
+      components: 'Select Components',
+      submit: 'Issue',
       cancel: 'Cancel',
-      note: 'Note: The new coin will start trading 2 days after issuance.'
+      note: 'Note: The new coin/ETF will start trading 2 days after issuance.'
     }
   }[lang];
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !symbol || !initialPrice || !totalSupply) return;
+    if (isETF && selectedComponents.length === 0) return;
 
     onIssue({
       name,
       symbol: symbol.toUpperCase(),
       initialPrice: parseFloat(initialPrice),
       totalSupply: parseFloat(totalSupply),
-      description
+      description,
+      isETF,
+      components: isETF ? selectedComponents : undefined
     });
   };
+
+  const toggleComponent = (coinId: string) => {
+    setSelectedComponents(prev => 
+      prev.includes(coinId) 
+        ? prev.filter(id => id !== coinId)
+        : [...prev, coinId]
+    );
+  };
+
+  const availableCoins = state.coins.filter(c => !c.isETF);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
@@ -72,6 +93,19 @@ export function CoinIssuerModal({ onClose, onIssue, lang }: CoinIssuerModalProps
 
         <div className="p-6 overflow-y-auto">
           <form id="issue-form" onSubmit={handleSubmit} className="space-y-4">
+            <div className="flex items-center gap-2 mb-4">
+              <input 
+                type="checkbox" 
+                id="isETF" 
+                checked={isETF} 
+                onChange={(e) => setIsETF(e.target.checked)}
+                className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
+              />
+              <label htmlFor="isETF" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                {t.isETF}
+              </label>
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t.name}</label>
               <input 
@@ -80,7 +114,7 @@ export function CoinIssuerModal({ onClose, onIssue, lang }: CoinIssuerModalProps
                 value={name}
                 onChange={e => setName(e.target.value)}
                 className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
-                placeholder="e.g. Bitcoin"
+                placeholder={isETF ? "e.g. Top 10 Crypto Index" : "e.g. Bitcoin"}
               />
             </div>
             <div>
@@ -91,7 +125,7 @@ export function CoinIssuerModal({ onClose, onIssue, lang }: CoinIssuerModalProps
                 value={symbol}
                 onChange={e => setSymbol(e.target.value)}
                 className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white uppercase"
-                placeholder="e.g. BTC"
+                placeholder={isETF ? "e.g. TOP10" : "e.g. BTC"}
               />
             </div>
             <div>
@@ -119,6 +153,35 @@ export function CoinIssuerModal({ onClose, onIssue, lang }: CoinIssuerModalProps
                 placeholder="e.g. 21000000"
               />
             </div>
+
+            {isETF && (
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{t.components}</label>
+                <div className="max-h-60 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 p-2 space-y-1">
+                  {availableCoins.map(coin => (
+                    <div 
+                      key={coin.id}
+                      onClick={() => toggleComponent(coin.id)}
+                      className={`flex items-center justify-between p-2 rounded cursor-pointer transition-colors ${
+                        selectedComponents.includes(coin.id) 
+                          ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300' 
+                          : 'hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold">{coin.symbol}</span>
+                        <span className="text-xs opacity-70">{coin.name}</span>
+                      </div>
+                      {selectedComponents.includes(coin.id) && <Check size={16} />}
+                    </div>
+                  ))}
+                </div>
+                {selectedComponents.length === 0 && (
+                  <p className="text-xs text-red-500 mt-1">Please select at least one component.</p>
+                )}
+              </div>
+            )}
+
             <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t.desc}</label>
               <textarea 
@@ -146,7 +209,8 @@ export function CoinIssuerModal({ onClose, onIssue, lang }: CoinIssuerModalProps
           <button 
             type="submit"
             form="issue-form"
-            className="px-4 py-2 text-sm font-medium text-white bg-indigo-500 hover:bg-indigo-600 rounded-lg transition-colors"
+            disabled={isETF && selectedComponents.length === 0}
+            className="px-4 py-2 text-sm font-medium text-white bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
           >
             {t.submit}
           </button>

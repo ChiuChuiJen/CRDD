@@ -43,6 +43,39 @@ export function initializeSimulation(coins: Coin[]): SimulationState {
     }]
   }));
 
+  const defaultETF: Coin = {
+    id: 'TOP10',
+    name: 'Top 10 Crypto Index ETF',
+    symbol: 'TOP10',
+    initialPrice: 100,
+    price: 100,
+    totalSupply: 10000000,
+    marketCap: 1000000000,
+    description: 'Tracks the top 10 cryptocurrencies by volume.',
+    volume24h: 5000000,
+    volume30d: 150000000,
+    history: [{ time: now, price: 100 }],
+    dailyHistory: [{ date: now, open: 100, high: 100, low: 100, close: 100 }],
+    chipDistribution: { foreign: 40, institution: 40, largeHolder: 10, retail: 10 },
+    circulation: { circulating: 100, staked: 0, locked: 0 },
+    sentiment: 0,
+    volatility: 0.02,
+    drift: 0,
+    variance: 0.0004,
+    kappa: 2,
+    theta: 0.0004,
+    xi: 0.1,
+    lambda: 1,
+    muJ: 0,
+    sigmaJ: 0.05,
+    hurst: 0.5,
+    lastNoise: 0,
+    isETF: true,
+    components: top50Ids.slice(0, 10)
+  };
+
+  initializedCoins.push(defaultETF);
+
   return {
     currentTime: now,
     coins: initializedCoins,
@@ -123,7 +156,10 @@ export function tickSimulation(
 
   let indexChangeRatio = 0;
 
-  const newCoins = state.coins.map(coin => {
+  const newCoins: Coin[] = [];
+  const coinReturns: Record<string, number> = {};
+
+  const processCoin = (coin: Coin) => {
     const isTrading = !coin.tradingDate || newTime >= coin.tradingDate;
     
     let newPrice = coin.price;
@@ -135,67 +171,92 @@ export function tickSimulation(
     let newLastNoise = coin.lastNoise || 0;
 
     if (isTrading) {
-      let mu = coin.drift;
-      let sigma = coin.volatility;
-
-      // Apply active events
-      for (const ev of newEvents) {
-        if (!ev.targetCoinId || ev.targetCoinId === coin.id) {
-          // Event impact is spread over the day (144 ticks)
-          mu += ev.impact / dt / 144; 
-          newSentiment += ev.impact * 10; // Events directly impact sentiment
+      if (coin.isETF && coin.components && coin.components.length > 0) {
+        let totalReturn = 0;
+        let validComponents = 0;
+        for (const compId of coin.components) {
+          if (coinReturns[compId] !== undefined) {
+            totalReturn += coinReturns[compId];
+            validComponents++;
+          }
         }
+        if (validComponents > 0) {
+          priceChangeRatio = totalReturn / validComponents;
+        }
+        // Add small tracking error
+        priceChangeRatio += (Math.random() - 0.5) * 0.0005;
+        
+        // Apply management fee (0.03% daily) at the start of a new day
+        if (isNewDay) {
+          priceChangeRatio -= 0.0003;
+        }
+
+        newPrice = coin.price * (1 + priceChangeRatio);
+        if (newPrice < 0.00000001) newPrice = 0.00000001;
+        priceChangeRatio = (newPrice - coin.price) / coin.price;
+      } else {
+        let mu = coin.drift;
+        let sigma = coin.volatility;
+
+        // Apply active events
+        for (const ev of newEvents) {
+          if (!ev.targetCoinId || ev.targetCoinId === coin.id) {
+            // Event impact is spread over the day (144 ticks)
+            mu += ev.impact / dt / 144; 
+            newSentiment += ev.impact * 10; // Events directly impact sentiment
+          }
+        }
+
+        // Stabilization mechanism (护盘/抛售)
+        // If price changes too much in a short time, revert mean
+        const dailyStartPrice = coin.dailyHistory.length > 0 ? coin.dailyHistory[coin.dailyHistory.length - 1].close : coin.initialPrice;
+        const dailyChange = (coin.price - dailyStartPrice) / dailyStartPrice;
+        
+        if (dailyChange > 0.2) {
+          // Too high, sell off
+          mu -= 0.5;
+        } else if (dailyChange < -0.2) {
+          // Too low, buy in
+          mu += 0.5;
+        }
+
+        // 1. Heston Model: Update variance (Volatility Clustering)
+        const kappa = coin.kappa || 2.0;
+        const theta = coin.theta || Math.pow(coin.volatility, 2);
+        const xi = coin.xi || 0.1;
+        
+        const dW_v = randn_bm() * Math.sqrt(dt);
+        newVariance = newVariance + kappa * (theta - newVariance) * dt + xi * Math.sqrt(Math.max(0, newVariance)) * dW_v;
+        newVariance = Math.max(0.000001, newVariance); // Prevent negative variance
+        const currentVolatility = Math.sqrt(newVariance);
+
+        // 2. Hurst Exponent: Fractional Brownian Motion approximation (Long-term memory)
+        const hurst = coin.hurst || 0.5;
+        const phi = hurst - 0.5; // AR(1) coefficient approximation
+        const epsilon = randn_bm();
+        newLastNoise = phi * newLastNoise + epsilon * Math.sqrt(1 - phi * phi);
+        const dW_s = newLastNoise * Math.sqrt(dt);
+
+        // 3. Merton Jump Diffusion: Poisson process for sudden jumps
+        const lambda = coin.lambda || 2.0;
+        const muJ = coin.muJ || 0;
+        const sigmaJ = coin.sigmaJ || 0.1;
+        
+        let jumpMultiplier = 1;
+        // Probability of jump in this dt
+        if (Math.random() < lambda * dt) {
+          const jumpSize = muJ + sigmaJ * randn_bm();
+          jumpMultiplier = Math.exp(jumpSize);
+        }
+
+        // Combine models for price step
+        const dS = mu * coin.price * dt + currentVolatility * coin.price * dW_s;
+        newPrice = (coin.price + dS) * jumpMultiplier;
+
+        if (newPrice < 0.00000001) newPrice = 0.00000001; // Prevent negative or zero
+
+        priceChangeRatio = (newPrice - coin.price) / coin.price;
       }
-
-      // Stabilization mechanism (护盘/抛售)
-      // If price changes too much in a short time, revert mean
-      const dailyStartPrice = coin.dailyHistory.length > 0 ? coin.dailyHistory[coin.dailyHistory.length - 1].close : coin.initialPrice;
-      const dailyChange = (coin.price - dailyStartPrice) / dailyStartPrice;
-      
-      if (dailyChange > 0.2) {
-        // Too high, sell off
-        mu -= 0.5;
-      } else if (dailyChange < -0.2) {
-        // Too low, buy in
-        mu += 0.5;
-      }
-
-      // 1. Heston Model: Update variance (Volatility Clustering)
-      const kappa = coin.kappa || 2.0;
-      const theta = coin.theta || Math.pow(coin.volatility, 2);
-      const xi = coin.xi || 0.1;
-      
-      const dW_v = randn_bm() * Math.sqrt(dt);
-      newVariance = newVariance + kappa * (theta - newVariance) * dt + xi * Math.sqrt(Math.max(0, newVariance)) * dW_v;
-      newVariance = Math.max(0.000001, newVariance); // Prevent negative variance
-      const currentVolatility = Math.sqrt(newVariance);
-
-      // 2. Hurst Exponent: Fractional Brownian Motion approximation (Long-term memory)
-      const hurst = coin.hurst || 0.5;
-      const phi = hurst - 0.5; // AR(1) coefficient approximation
-      const epsilon = randn_bm();
-      newLastNoise = phi * newLastNoise + epsilon * Math.sqrt(1 - phi * phi);
-      const dW_s = newLastNoise * Math.sqrt(dt);
-
-      // 3. Merton Jump Diffusion: Poisson process for sudden jumps
-      const lambda = coin.lambda || 2.0;
-      const muJ = coin.muJ || 0;
-      const sigmaJ = coin.sigmaJ || 0.1;
-      
-      let jumpMultiplier = 1;
-      // Probability of jump in this dt
-      if (Math.random() < lambda * dt) {
-        const jumpSize = muJ + sigmaJ * randn_bm();
-        jumpMultiplier = Math.exp(jumpSize);
-      }
-
-      // Combine models for price step
-      const dS = mu * coin.price * dt + currentVolatility * coin.price * dW_s;
-      newPrice = (coin.price + dS) * jumpMultiplier;
-
-      if (newPrice < 0.00000001) newPrice = 0.00000001; // Prevent negative or zero
-
-      priceChangeRatio = (newPrice - coin.price) / coin.price;
 
       // Update sentiment based on price action and mean reversion
       newSentiment -= newSentiment * 0.001; // Slow mean reversion to 0
@@ -218,6 +279,10 @@ export function tickSimulation(
           newVolume24h += tickVolume;
         }
       }
+    }
+
+    if (!coin.isETF) {
+      coinReturns[coin.id] = priceChangeRatio;
     }
 
     if (state.top50Ids.includes(coin.id)) {
@@ -271,7 +336,7 @@ export function tickSimulation(
     staked = (staked / totalCirculation) * 100;
     circulating = (circulating / totalCirculation) * 100;
 
-    return {
+    newCoins.push({
       ...coin,
       price: newPrice,
       history,
@@ -282,8 +347,18 @@ export function tickSimulation(
       sentiment: newSentiment,
       variance: newVariance,
       lastNoise: newLastNoise
-    };
-  });
+    });
+  };
+
+  // Process normal coins first
+  for (const coin of state.coins) {
+    if (!coin.isETF) processCoin(coin);
+  }
+
+  // Process ETFs
+  for (const coin of state.coins) {
+    if (coin.isETF) processCoin(coin);
+  }
 
   const newIndexValue = state.indexValue * (1 + indexChangeRatio);
 
