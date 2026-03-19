@@ -1,22 +1,31 @@
-import { useState } from 'react';
-import { X, Plus, Check } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { X, Plus, Check, Download, Upload } from 'lucide-react';
 import { SimulationState } from '../lib/simulation';
 
 interface CoinIssuerModalProps {
   state: SimulationState;
   onClose: () => void;
   onIssue: (data: any) => void;
+  onImport: (data: any[]) => void;
   lang: 'zh' | 'en';
 }
 
-export function CoinIssuerModal({ state, onClose, onIssue, lang }: CoinIssuerModalProps) {
+export function CoinIssuerModal({ state, onClose, onIssue, onImport, lang }: CoinIssuerModalProps) {
   const [name, setName] = useState('');
   const [symbol, setSymbol] = useState('');
   const [initialPrice, setInitialPrice] = useState('');
   const [totalSupply, setTotalSupply] = useState('');
   const [description, setDescription] = useState('');
+  const [category, setCategory] = useState('Others');
   const [isETF, setIsETF] = useState(false);
   const [selectedComponents, setSelectedComponents] = useState<string[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const CATEGORIES = [
+    'Layer 1', 'Payment', 'DeFi & Finance', 'GameFi', 'AI & Data', 
+    'Meme', 'Privacy & Security', 'Storage & Data', 'Energy & Environment', 
+    'Metaverse', 'Infrastructure', 'Others'
+  ];
 
   const t = {
     zh: {
@@ -25,12 +34,16 @@ export function CoinIssuerModal({ state, onClose, onIssue, lang }: CoinIssuerMod
       symbol: '代號',
       price: '初始價格 (CRDT)',
       supply: '發行量',
+      category: '類別',
       desc: '介紹',
       isETF: '這是一檔 ETF',
       components: '選擇成分幣',
       submit: '確認發行',
       cancel: '取消',
-      note: '註：新貨幣/ETF將於發行日後 2 天正式上市交易。'
+      note: '註：新貨幣/ETF將於發行日後 2 天正式上市交易。',
+      export: '匯出',
+      import: '匯入',
+      importError: '匯入失敗，請檢查檔案格式',
     },
     en: {
       title: 'Issue New Coin / ETF',
@@ -38,12 +51,16 @@ export function CoinIssuerModal({ state, onClose, onIssue, lang }: CoinIssuerMod
       symbol: 'Symbol',
       price: 'Initial Price (CRDT)',
       supply: 'Total Supply',
+      category: 'Category',
       desc: 'Description',
       isETF: 'This is an ETF',
       components: 'Select Components',
       submit: 'Issue',
       cancel: 'Cancel',
-      note: 'Note: The new coin/ETF will start trading 2 days after issuance.'
+      note: 'Note: The new coin/ETF will start trading 2 days after issuance.',
+      export: 'Export',
+      import: 'Import',
+      importError: 'Import failed, please check file format',
     }
   }[lang];
 
@@ -58,6 +75,7 @@ export function CoinIssuerModal({ state, onClose, onIssue, lang }: CoinIssuerMod
       initialPrice: parseFloat(initialPrice),
       totalSupply: parseFloat(totalSupply),
       description,
+      category: isETF ? 'ETF' : category,
       isETF,
       components: isETF ? selectedComponents : undefined
     });
@@ -69,6 +87,56 @@ export function CoinIssuerModal({ state, onClose, onIssue, lang }: CoinIssuerMod
         ? prev.filter(id => id !== coinId)
         : [...prev, coinId]
     );
+  };
+
+  const handleExport = () => {
+    const customCoins = state.coins.filter(c => c.isCustom).map(c => ({
+      name: c.name,
+      symbol: c.symbol,
+      initialPrice: c.initialPrice,
+      totalSupply: c.totalSupply,
+      description: c.description,
+      category: c.category,
+      isETF: c.isETF,
+      components: c.components
+    }));
+    
+    const blob = new Blob([JSON.stringify(customCoins, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'custom_coins.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target?.result as string);
+        if (Array.isArray(data)) {
+          onImport(data);
+        } else {
+          alert(t.importError);
+        }
+      } catch (err) {
+        alert(t.importError);
+      }
+    };
+    reader.readAsText(file);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   const availableCoins = state.coins.filter(c => !c.isETF);
@@ -154,6 +222,21 @@ export function CoinIssuerModal({ state, onClose, onIssue, lang }: CoinIssuerMod
               />
             </div>
 
+            {!isETF && (
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t.category}</label>
+                <select
+                  value={category}
+                  onChange={e => setCategory(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                >
+                  {CATEGORIES.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {isETF && (
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{t.components}</label>
@@ -198,22 +281,51 @@ export function CoinIssuerModal({ state, onClose, onIssue, lang }: CoinIssuerMod
           </div>
         </div>
 
-        <div className="p-6 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3">
-          <button 
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
-          >
-            {t.cancel}
-          </button>
-          <button 
-            type="submit"
-            form="issue-form"
-            disabled={isETF && selectedComponents.length === 0}
-            className="px-4 py-2 text-sm font-medium text-white bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
-          >
-            {t.submit}
-          </button>
+        <div className="p-6 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center">
+          <div className="flex gap-2">
+            <input 
+              type="file" 
+              accept=".json" 
+              className="hidden" 
+              ref={fileInputRef}
+              onChange={handleFileChange}
+            />
+            <button 
+              type="button"
+              onClick={handleImportClick}
+              className="flex items-center gap-1 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+              title={t.import}
+            >
+              <Upload size={16} />
+              <span className="hidden sm:inline">{t.import}</span>
+            </button>
+            <button 
+              type="button"
+              onClick={handleExport}
+              className="flex items-center gap-1 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+              title={t.export}
+            >
+              <Download size={16} />
+              <span className="hidden sm:inline">{t.export}</span>
+            </button>
+          </div>
+          <div className="flex gap-3">
+            <button 
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+            >
+              {t.cancel}
+            </button>
+            <button 
+              type="submit"
+              form="issue-form"
+              disabled={isETF && selectedComponents.length === 0}
+              className="px-4 py-2 text-sm font-medium text-white bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
+            >
+              {t.submit}
+            </button>
+          </div>
         </div>
       </div>
     </div>

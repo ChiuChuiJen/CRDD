@@ -18,6 +18,7 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
   const [sortColumn, setSortColumn] = useState<SortColumn>('coin');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [activeTab, setActiveTab] = useState<'all' | 'etf' | 'leaderboard'>('all');
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
 
   const t = {
     zh: {
@@ -32,6 +33,7 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
       vol24h: '當日成交量',
       upcoming: '即將上市',
       days: '天',
+      allCategories: '全部類別',
     },
     en: {
       coins: 'Market',
@@ -45,6 +47,7 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
       vol24h: '24h Volume',
       upcoming: 'Upcoming',
       days: 'd',
+      allCategories: 'All Categories',
     }
   }[lang];
 
@@ -62,8 +65,17 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
     return sortDirection === 'asc' ? <ChevronUp size={14} className="text-indigo-500" /> : <ChevronDown size={14} className="text-indigo-500" />;
   };
 
+  const availableCategories = Array.from(
+    new Set(
+      state.coins
+        .filter(coin => activeTab === 'etf' ? coin.isETF : !coin.isETF)
+        .map(c => c.category || (c.isETF ? 'ETF' : 'Others'))
+    )
+  ).sort();
+
   const coinsWithStats = state.coins
     .filter(coin => activeTab === 'etf' ? coin.isETF : !coin.isETF)
+    .filter(coin => selectedCategory === 'All' || (coin.category || (coin.isETF ? 'ETF' : 'Others')) === selectedCategory)
     .map(coin => {
       const isTop50 = state.top50Ids.includes(coin.id);
     const startPrice = coin.dailyHistory.length > 0 ? coin.dailyHistory[coin.dailyHistory.length - 1].open : coin.initialPrice;
@@ -124,7 +136,7 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
             </h2>
             <div className="flex bg-slate-100 dark:bg-slate-800 rounded-lg p-1">
               <button
-                onClick={() => setActiveTab('all')}
+                onClick={() => { setActiveTab('all'); setSelectedCategory('All'); }}
                 className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
                   activeTab === 'all'
                     ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
@@ -134,7 +146,7 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
                 {t.coins}
               </button>
               <button
-                onClick={() => setActiveTab('etf')}
+                onClick={() => { setActiveTab('etf'); setSelectedCategory('All'); }}
                 className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
                   activeTab === 'etf'
                     ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
@@ -144,7 +156,7 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
                 {t.etfs}
               </button>
               <button
-                onClick={() => setActiveTab('leaderboard')}
+                onClick={() => { setActiveTab('leaderboard'); setSelectedCategory('All'); }}
                 className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-1 ${
                   activeTab === 'leaderboard'
                     ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
@@ -160,6 +172,34 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
             {activeTab === 'leaderboard' ? '' : `${coinsWithStats.length} ${activeTab === 'etf' ? 'ETFs' : 'Coins'} Listed`}
           </div>
         </div>
+
+        {activeTab !== 'leaderboard' && availableCategories.length > 1 && (
+          <div className="flex items-center gap-2 overflow-x-auto pb-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+            <button
+              onClick={() => setSelectedCategory('All')}
+              className={`whitespace-nowrap px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                selectedCategory === 'All'
+                  ? 'bg-indigo-500 text-white shadow-sm'
+                  : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
+              }`}
+            >
+              {t.allCategories}
+            </button>
+            {availableCategories.map(category => (
+              <button
+                key={category}
+                onClick={() => setSelectedCategory(category)}
+                className={`whitespace-nowrap px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  selectedCategory === category
+                    ? 'bg-indigo-500 text-white shadow-sm'
+                    : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
+                }`}
+              >
+                {category}
+              </button>
+            ))}
+          </div>
+        )}
 
         {activeTab === 'leaderboard' ? (
           <LeaderboardView state={state} lang={lang} onSelectCoin={onSelectCoin} />
@@ -223,8 +263,11 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
                             {coin.symbol.slice(0, 2)}
                           </div>
                           <div>
-                            <div className="font-semibold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                            <div className="font-semibold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors flex items-center gap-2">
                               {coin.symbol}
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                                {coin.category || (coin.isETF ? 'ETF' : 'Others')}
+                              </span>
                             </div>
                             <div className="text-xs text-slate-500 dark:text-slate-400">{coin.name}</div>
                           </div>

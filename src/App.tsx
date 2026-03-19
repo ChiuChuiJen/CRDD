@@ -83,65 +83,77 @@ export default function App() {
     setState(nextState);
   };
 
-  const handleIssueCoin = (data: any) => {
+  const handleImportCoins = (coinsData: any[]) => {
     if (!state) return;
     const now = state.currentTime;
     const tradingDate = now + 2 * 24 * 60 * 60 * 1000; // 2 days later
     
-    const newCoin: Coin = {
-      id: data.symbol,
-      name: data.name,
-      symbol: data.symbol,
-      initialPrice: data.initialPrice,
-      price: data.initialPrice,
-      totalSupply: data.totalSupply,
-      marketCap: data.initialPrice * data.totalSupply,
-      description: data.description,
-      volume24h: 0,
-      volume30d: 0,
-      history: [{ time: now, price: data.initialPrice }],
-      dailyHistory: [{ date: now, open: data.initialPrice, high: data.initialPrice, low: data.initialPrice, close: data.initialPrice }],
-      chipDistribution: {
-        foreign: Math.random() * 40 + 10,
-        institution: Math.random() * 30 + 10,
-        largeHolder: Math.random() * 20 + 5,
-        retail: 100 - (Math.random() * 40 + 10) - (Math.random() * 30 + 10) - (Math.random() * 20 + 5) // Simplified
-      },
-      circulation: {
-        locked: Math.random() * 30 + 10,
-        staked: Math.random() * 40 + 10,
-        circulating: 0 // Will be calculated
-      },
-      sentiment: 0, // Neutral sentiment for new coin
-      volatility: Math.random() * 0.05 + 0.01,
-      drift: (Math.random() - 0.5) * 0.001,
-      variance: Math.pow(Math.random() * 0.05 + 0.01, 2),
-      kappa: Math.random() * 2 + 1,
-      theta: Math.pow(Math.random() * 0.05 + 0.01, 2),
-      xi: Math.random() * 0.2 + 0.05,
-      lambda: Math.random() * 5 + 1,
-      muJ: (Math.random() - 0.5) * 0.1,
-      sigmaJ: Math.random() * 0.1 + 0.05,
-      hurst: Math.random() * 0.4 + 0.3,
-      lastNoise: 0,
-      issueDate: now,
-      tradingDate: tradingDate,
-      isETF: data.isETF,
-      components: data.components
-    };
+    const newCoins: Coin[] = coinsData.map(data => {
+      const newCoin: Coin = {
+        id: data.symbol,
+        name: data.name,
+        symbol: data.symbol,
+        initialPrice: data.initialPrice,
+        price: data.initialPrice,
+        totalSupply: data.totalSupply,
+        marketCap: data.initialPrice * data.totalSupply,
+        description: data.description,
+        volume24h: 0,
+        volume30d: 0,
+        history: [{ time: now, price: data.initialPrice }],
+        dailyHistory: [{ date: now, open: data.initialPrice, high: data.initialPrice, low: data.initialPrice, close: data.initialPrice }],
+        chipDistribution: {
+          foreign: Math.random() * 40 + 10,
+          institution: Math.random() * 30 + 10,
+          largeHolder: Math.random() * 20 + 5,
+          retail: 0 // Will be calculated
+        },
+        circulation: {
+          locked: Math.random() * 30 + 10,
+          staked: Math.random() * 40 + 10,
+          circulating: 0 // Will be calculated
+        },
+        sentiment: 0, // Neutral sentiment for new coin
+        volatility: Math.random() * 0.05 + 0.01,
+        drift: (Math.random() - 0.5) * 0.001,
+        variance: Math.pow(Math.random() * 0.05 + 0.01, 2),
+        kappa: Math.random() * 2 + 1,
+        theta: Math.pow(Math.random() * 0.05 + 0.01, 2),
+        xi: Math.random() * 0.2 + 0.05,
+        lambda: Math.random() * 5 + 1,
+        muJ: (Math.random() - 0.5) * 0.1,
+        sigmaJ: Math.random() * 0.1 + 0.05,
+        hurst: Math.random() * 0.4 + 0.3,
+        lastNoise: 0,
+        issueDate: now,
+        tradingDate: tradingDate,
+        isETF: data.isETF,
+        components: data.components,
+        isCustom: true,
+        category: data.category || (data.isETF ? 'ETF' : 'Others')
+      };
 
-    // Fix retail calculation
-    newCoin.chipDistribution.retail = 100 - newCoin.chipDistribution.foreign - newCoin.chipDistribution.institution - newCoin.chipDistribution.largeHolder;
-    newCoin.circulation.circulating = 100 - newCoin.circulation.locked - newCoin.circulation.staked;
+      // Fix retail calculation
+      newCoin.chipDistribution.retail = 100 - newCoin.chipDistribution.foreign - newCoin.chipDistribution.institution - newCoin.chipDistribution.largeHolder;
+      newCoin.circulation.circulating = 100 - newCoin.circulation.locked - newCoin.circulation.staked;
+
+      return newCoin;
+    });
 
     setState(prev => {
       if (!prev) return prev;
+      const existingIds = new Set(prev.coins.map(c => c.id));
+      const uniqueNewCoins = newCoins.filter(c => !existingIds.has(c.id));
       return {
         ...prev,
-        coins: [...prev.coins, newCoin]
+        coins: [...prev.coins, ...uniqueNewCoins]
       };
     });
     setIsIssuerOpen(false);
+  };
+
+  const handleIssueCoin = (data: any) => {
+    handleImportCoins([data]);
   };
 
   if (!state) return <div className="flex items-center justify-center h-screen bg-gray-900 text-white">Loading...</div>;
@@ -188,6 +200,7 @@ export default function App() {
           state={state}
           onClose={() => setIsIssuerOpen(false)}
           onIssue={handleIssueCoin}
+          onImport={handleImportCoins}
           lang={lang}
         />
       )}

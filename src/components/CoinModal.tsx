@@ -54,6 +54,8 @@ export function CoinModal({ coin, state, onClose, lang, theme }: CoinModalProps)
       staked: '質押中',
       locked: '團隊鎖倉中',
       sentiment: '市場看好度',
+      issuePrice: '發行價格',
+      category: '類別',
     },
     en: {
       info: 'Coin Info',
@@ -81,6 +83,8 @@ export function CoinModal({ coin, state, onClose, lang, theme }: CoinModalProps)
       staked: 'Staked',
       locked: 'Team Locked',
       sentiment: 'Market Sentiment',
+      issuePrice: 'Issue Price',
+      category: 'Category',
     }
   }[lang];
 
@@ -315,6 +319,20 @@ export function CoinModal({ coin, state, onClose, lang, theme }: CoinModalProps)
                   <Info size={16} /> {t.basic}
                 </h3>
                 <div className="space-y-4">
+                  <div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400 mb-1">{t.category}</div>
+                    <div className="font-medium text-slate-900 dark:text-white">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300">
+                        {coin.category || (coin.isETF ? 'ETF' : 'Others')}
+                      </span>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400 mb-1">{t.issuePrice}</div>
+                    <div className="font-mono font-medium text-slate-900 dark:text-white">
+                      {coin.initialPrice < 0.01 ? coin.initialPrice.toFixed(8) : coin.initialPrice.toFixed(4)} CRDT
+                    </div>
+                  </div>
                   <div>
                     <div className="text-xs text-slate-500 dark:text-slate-400 mb-1">{t.marketCap}</div>
                     <div className="font-mono font-medium text-slate-900 dark:text-white">

@@ -41,6 +41,8 @@ export interface Coin {
   issueDate?: number;
   isETF?: boolean;
   components?: string[];
+  isCustom?: boolean;
+  category?: string;
 }
 
 export interface MarketEvent {
@@ -69,6 +71,19 @@ export function parseCoins(): Coin[] {
     const marketCap = parseFloat(parts[4].split('：')[1].trim());
     const description = parts[5].split('：')[1].trim();
 
+    let category = 'Others';
+    if (description.includes('主鏈') || description.includes('平台') || description.includes('基礎設施') || description.includes('節點')) category = 'Layer 1';
+    else if (description.includes('DeFi') || description.includes('借貸') || description.includes('金融') || description.includes('資產') || description.includes('清算')) category = 'DeFi & Finance';
+    else if (description.includes('支付') || description.includes('交易') || description.includes('結算')) category = 'Payment';
+    else if (description.includes('遊戲') || description.includes('Game')) category = 'GameFi';
+    else if (description.includes('AI') || description.includes('算力') || description.includes('預測') || description.includes('計算')) category = 'AI & Data';
+    else if (description.includes('MEME') || description.includes('社群') || description.includes('治理')) category = 'Meme';
+    else if (description.includes('隱私') || description.includes('匿名') || description.includes('安全') || description.includes('防護') || description.includes('隱匿')) category = 'Privacy & Security';
+    else if (description.includes('儲存') || description.includes('資料') || description.includes('數據') || description.includes('識別')) category = 'Storage & Data';
+    else if (description.includes('能源') || description.includes('環保') || description.includes('電力') || description.includes('氣候') || description.includes('資源') || description.includes('燃料')) category = 'Energy & Environment';
+    else if (description.includes('元宇宙') || description.includes('虛擬') || description.includes('社交') || description.includes('星際') || description.includes('太空') || description.includes('行星')) category = 'Metaverse';
+    else if (description.includes('物流') || description.includes('供應鏈') || description.includes('航太') || description.includes('衛星') || description.includes('通訊') || description.includes('醫療') || description.includes('生技')) category = 'Infrastructure';
+
     // Generate random initial chip distribution
     const foreign = Math.random() * 40 + 10;
     const institution = Math.random() * 30 + 10;
@@ -89,6 +104,7 @@ export function parseCoins(): Coin[] {
       totalSupply,
       marketCap,
       description,
+      category,
       volume24h: Math.random() * marketCap * 0.01, // Random initial 24h volume
       volume30d: Math.random() * marketCap * 0.1, // Random initial volume
       history: [{ time: Date.now(), price }],
