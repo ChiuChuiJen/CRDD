@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { SimulationState } from '../lib/simulation';
 import { Coin } from '../data/parser';
-import { ArrowUpRight, ArrowDownRight, Activity, ChevronUp, ChevronDown, ArrowUpDown } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, Activity, ChevronUp, ChevronDown, ArrowUpDown, Trophy } from 'lucide-react';
 import { formatLargeNumber } from '../lib/format';
+import { LeaderboardView } from './LeaderboardView';
 
 interface DashboardProps {
   state: SimulationState;
@@ -16,12 +17,13 @@ type SortDirection = 'asc' | 'desc';
 export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
   const [sortColumn, setSortColumn] = useState<SortColumn>('coin');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
-  const [activeTab, setActiveTab] = useState<'all' | 'etf'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'etf' | 'leaderboard'>('all');
 
   const t = {
     zh: {
       coins: '市場行情',
       etfs: 'ETF',
+      leaderboard: '榜單',
       news: '公告及新聞',
       top50: '權值股 (Top 50)',
       price: '最新價',
@@ -34,6 +36,7 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
     en: {
       coins: 'Market',
       etfs: 'ETFs',
+      leaderboard: 'Leaderboard',
       news: 'News & Announcements',
       top50: 'Weighted (Top 50)',
       price: 'Price',
@@ -140,15 +143,29 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
               >
                 {t.etfs}
               </button>
+              <button
+                onClick={() => setActiveTab('leaderboard')}
+                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-1 ${
+                  activeTab === 'leaderboard'
+                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+                }`}
+              >
+                <Trophy size={14} />
+                {t.leaderboard}
+              </button>
             </div>
           </div>
           <div className="text-sm text-slate-500 dark:text-slate-400">
-            {coinsWithStats.length} {activeTab === 'etf' ? 'ETFs' : 'Coins'} Listed
+            {activeTab === 'leaderboard' ? '' : `${coinsWithStats.length} ${activeTab === 'etf' ? 'ETFs' : 'Coins'} Listed`}
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
-          <div className="overflow-x-auto">
+        {activeTab === 'leaderboard' ? (
+          <LeaderboardView state={state} lang={lang} onSelectCoin={onSelectCoin} />
+        ) : (
+          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
+            <div className="overflow-x-auto">
             <table className="w-full text-sm text-left">
               <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800/50 dark:text-slate-400 border-b-2 border-indigo-500/50">
                 <tr>
@@ -250,6 +267,7 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
             </table>
           </div>
         </div>
+        )}
       </div>
 
       <div className="lg:col-span-1 space-y-6">
