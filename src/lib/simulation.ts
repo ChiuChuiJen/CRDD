@@ -1,5 +1,28 @@
 import { Coin, MarketEvent, ImpactLevel } from '../data/parser';
 
+export interface LuckBet {
+  id: string;
+  amount: number;
+  option: 'small' | 'large' | 'zero_five';
+  timestamp: number;
+  odds: number;
+}
+
+export interface LuckEvent {
+  id: string;
+  targetType: 'index' | 'coin' | 'etf' | 'leveraged';
+  targetId: string;
+  targetDigit: 'units' | 'tens' | 'hundreds' | 'thousands' | 'ten_thousands' | 'decimal_1' | 'decimal_2' | 'decimal_3' | 'decimal_4';
+  listDate: number;
+  stopTradingDate: number;
+  settlementDate: number;
+  delistDate: number;
+  status: 'active' | 'settled' | 'delisted';
+  bets: LuckBet[];
+  settlementValue?: number;
+  winningOption?: 'small' | 'large' | 'zero_five';
+}
+
 export interface SimulationState {
   currentTime: number;
   coins: Coin[];
@@ -9,6 +32,8 @@ export interface SimulationState {
   activeEvents: { event: MarketEvent, targetCoinId?: string, targetCategory?: string, impact: number, expiresAt: number }[];
   news: { time: number, text: string }[];
   top50Ids: string[];
+  luckEvents: LuckEvent[];
+  userBalance: number;
 }
 
 // Standard Normal variate using Box-Muller transform
@@ -24,6 +49,89 @@ function gbmStep(S: number, mu: number, sigma: number, dt: number): number {
   const dW = Math.sqrt(dt) * randn_bm();
   const dS = mu * S * dt + sigma * S * dW;
   return S + dS;
+}
+
+export function getLuckEventSchedule(year: number, month: number) {
+  const isFeb = month === 1;
+  const events = [
+    {
+      list: new Date(year, month, 1, 2, 0).getTime(),
+      stop: new Date(year, month, 7, 16, 0).getTime(),
+      settle: new Date(year, month, 8, 20, 0).getTime(),
+    },
+    {
+      list: new Date(year, month, 9, 2, 0).getTime(),
+      stop: new Date(year, month, 15, 16, 0).getTime(),
+      settle: new Date(year, month, 16, 20, 0).getTime(),
+    },
+    {
+      list: new Date(year, month, 17, 2, 0).getTime(),
+      stop: new Date(year, month, 23, 16, 0).getTime(),
+      settle: new Date(year, month, 24, 20, 0).getTime(),
+    },
+    {
+      list: new Date(year, month, 25, 2, 0).getTime(),
+      stop: isFeb ? new Date(year, month, 27, 12, 0).getTime() : new Date(year, month, 29, 16, 0).getTime(),
+      settle: isFeb ? new Date(year, month, 28, 20, 0).getTime() : new Date(year, month, 30, 20, 0).getTime(),
+    }
+  ];
+
+  return events.map(e => ({
+    ...e,
+    delist: e.settle + 24 * 60 * 60 * 1000
+  }));
+}
+
+export function calculateLuckOdds(targetValue: number, digitType: string): { small: number, large: number, zero_five: number } {
+  let digit = 0;
+  if (digitType === 'units') digit = Math.floor(targetValue) % 10;
+  else if (digitType === 'tens') digit = Math.floor(targetValue / 10) % 10;
+  else if (digitType === 'hundreds') digit = Math.floor(targetValue / 100) % 10;
+  else if (digitType === 'thousands') digit = Math.floor(targetValue / 1000) % 10;
+  else if (digitType === 'ten_thousands') digit = Math.floor(targetValue / 10000) % 10;
+  else if (digitType === 'decimal_1') digit = Math.floor(targetValue * 10) % 10;
+  else if (digitType === 'decimal_2') digit = Math.floor(targetValue * 100) % 10;
+  else if (digitType === 'decimal_3') digit = Math.floor(targetValue * 1000) % 10;
+  else if (digitType === 'decimal_4') digit = Math.floor(targetValue * 10000) % 10;
+
+  // 數值接近5或0則5或0選項倍率最高 (Max 3x)
+  // 1~4 (Small), 6~9 (Large), 5 or 0 (Zero/Five)
+  // Distance to 0 or 5
+  const distTo0 = Math.min(digit, 10 - digit);
+  const distTo5 = Math.abs(digit - 5);
+  const minDistTo05 = Math.min(distTo0, distTo5);
+
+  let small = 1.5, large = 1.5, zero_five = 1.5;
+  
+  // minDistTo05:
+  // 0 -> digit is 0 or 5
+  // 1 -> digit is 1, 4, 6, 9
+  // 2 -> digit is 2, 3, 7, 8
+  
+  if (minDistTo05 === 0) {
+    zero_five = 3.0;
+  } else if (minDistTo05 === 1) {
+    zero_five = 2.5;
+  } else {
+    zero_five = 1.5;
+  }
+
+  if (digit >= 1 && digit <= 4) {
+    small = 3.0 - (digit - 1) * 0.5; // 1->3.0, 2->2.5, 3->2.0, 4->1.5
+    large = 1.5 + (digit - 1) * 0.5; // 1->1.5, 2->2.0, 3->2.5, 4->3.0
+  } else if (digit >= 6 && digit <= 9) {
+    large = 1.5 + (digit - 6) * 0.5; // 6->1.5, 7->2.0, 8->2.5, 9->3.0
+    small = 3.0 - (digit - 6) * 0.5; // 6->3.0, 7->2.5, 8->2.0, 9->1.5
+  } else {
+    small = 1.5;
+    large = 1.5;
+  }
+
+  return {
+    small: Number(small.toFixed(2)),
+    large: Number(large.toFixed(2)),
+    zero_five: Number(zero_five.toFixed(2))
+  };
 }
 
 export function initializeSimulation(coins: Coin[]): SimulationState {
@@ -85,7 +193,9 @@ export function initializeSimulation(coins: Coin[]): SimulationState {
     indexDailyHistory: [{ date: now, open: 10000, high: 10000, low: 10000, close: 10000 }],
     activeEvents: [],
     news: [],
-    top50Ids
+    top50Ids,
+    luckEvents: [],
+    userBalance: 100000 // Give user some initial balance
   };
 }
 
@@ -104,6 +214,37 @@ export function tickSimulation(
   
   let newEvents = [...state.activeEvents].filter(e => e.expiresAt > newTime);
   let newNews = [...state.news];
+  let newLuckEvents = [...state.luckEvents];
+  let newUserBalance = state.userBalance;
+
+  // Manage Luck Events
+  const d = new Date(newTime);
+  const schedule = getLuckEventSchedule(d.getFullYear(), d.getMonth());
+  
+  for (const s of schedule) {
+    const settleDateStr = new Date(s.settle).toISOString().slice(0, 10).replace(/-/g, '');
+    const eventId = `CRLUCK-C-In-${settleDateStr}`;
+    
+    // Check if we need to list it
+    if (newTime >= s.list && newTime < s.delist) {
+      let existing = newLuckEvents.find(e => e.id === eventId);
+      if (!existing) {
+        existing = {
+          id: eventId,
+          targetType: 'index',
+          targetId: 'index',
+          targetDigit: 'units',
+          listDate: s.list,
+          stopTradingDate: s.stop,
+          settlementDate: s.settle,
+          delistDate: s.delist,
+          status: 'active',
+          bets: []
+        };
+        newLuckEvents.push(existing);
+      }
+    }
+  }
 
   // Generate new events if it's a new day
   if (isNewDay) {
@@ -499,6 +640,51 @@ export function tickSimulation(
     newTop50Ids = sorted.slice(0, 50).map(c => c.id);
   }
 
+  // Process Luck Events Settlement
+  for (const event of newLuckEvents) {
+    if (event.status === 'active' && newTime >= event.settlementDate) {
+      event.status = 'settled';
+      
+      let targetValue = 0;
+      if (event.targetType === 'index') {
+        targetValue = newIndexValue;
+      } else {
+        const targetCoin = newCoins.find(c => c.id === event.targetId);
+        if (targetCoin) targetValue = targetCoin.price;
+      }
+      
+      event.settlementValue = targetValue;
+      
+      let digit = 0;
+      if (event.targetDigit === 'units') digit = Math.floor(targetValue) % 10;
+      else if (event.targetDigit === 'tens') digit = Math.floor(targetValue / 10) % 10;
+      else if (event.targetDigit === 'hundreds') digit = Math.floor(targetValue / 100) % 10;
+      else if (event.targetDigit === 'thousands') digit = Math.floor(targetValue / 1000) % 10;
+      else if (event.targetDigit === 'ten_thousands') digit = Math.floor(targetValue / 10000) % 10;
+      else if (event.targetDigit === 'decimal_1') digit = Math.floor(targetValue * 10) % 10;
+      else if (event.targetDigit === 'decimal_2') digit = Math.floor(targetValue * 100) % 10;
+      else if (event.targetDigit === 'decimal_3') digit = Math.floor(targetValue * 1000) % 10;
+      else if (event.targetDigit === 'decimal_4') digit = Math.floor(targetValue * 10000) % 10;
+      
+      if (digit >= 1 && digit <= 4) event.winningOption = 'small';
+      else if (digit >= 6 && digit <= 9) event.winningOption = 'large';
+      else event.winningOption = 'zero_five';
+      
+      // Payout winning bets
+      for (const bet of event.bets) {
+        if (bet.option === event.winningOption) {
+          newUserBalance += bet.amount * bet.odds;
+        }
+      }
+    }
+    
+    if (event.status === 'settled' && newTime >= event.delistDate) {
+      event.status = 'delisted';
+    }
+  }
+  
+  newLuckEvents = newLuckEvents.filter(e => e.status !== 'delisted');
+
   return {
     currentTime: newTime,
     coins: newCoins,
@@ -507,6 +693,8 @@ export function tickSimulation(
     indexDailyHistory,
     activeEvents: newEvents,
     news: newNews,
-    top50Ids: newTop50Ids
+    top50Ids: newTop50Ids,
+    luckEvents: newLuckEvents,
+    userBalance: newUserBalance
   };
 }

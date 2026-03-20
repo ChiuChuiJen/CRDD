@@ -1,9 +1,10 @@
 import React, { useState, useRef } from 'react';
 import { SimulationState } from '../lib/simulation';
 import { Coin } from '../data/parser';
-import { ArrowUpRight, ArrowDownRight, Activity, ChevronUp, ChevronDown, ArrowUpDown, Trophy } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, Activity, ChevronUp, ChevronDown, ArrowUpDown, Trophy, Dices } from 'lucide-react';
 import { formatLargeNumber } from '../lib/format';
 import { LeaderboardView } from './LeaderboardView';
+import { LuckTab } from './LuckTab';
 
 interface DashboardProps {
   state: SimulationState;
@@ -17,7 +18,7 @@ type SortDirection = 'asc' | 'desc';
 export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
   const [sortColumn, setSortColumn] = useState<SortColumn>('coin');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
-  const [activeTab, setActiveTab] = useState<'all' | 'etf' | 'leveraged' | 'stablecoin' | 'leaderboard'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'etf' | 'leveraged' | 'stablecoin' | 'leaderboard' | 'luck'>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -240,14 +241,25 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
                 <Trophy size={14} />
                 {t.leaderboard}
               </button>
+              <button
+                onClick={() => { setActiveTab('luck'); setSelectedCategory('All'); }}
+                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-1 ${
+                  activeTab === 'luck'
+                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+                }`}
+              >
+                <Dices size={14} />
+                {lang === 'zh' ? 'Luck' : 'Luck'}
+              </button>
             </div>
           </div>
           <div className="text-sm text-slate-500 dark:text-slate-400">
-            {activeTab === 'leaderboard' ? '' : `${coinsWithStats.length} ${activeTab === 'etf' ? 'ETFs' : (activeTab === 'leveraged' ? 'Leveraged Tokens' : (activeTab === 'stablecoin' ? 'Stablecoins' : 'Coins'))} Listed`}
+            {activeTab === 'leaderboard' || activeTab === 'luck' ? '' : `${coinsWithStats.length} ${activeTab === 'etf' ? 'ETFs' : (activeTab === 'leveraged' ? 'Leveraged Tokens' : (activeTab === 'stablecoin' ? 'Stablecoins' : 'Coins'))} Listed`}
           </div>
         </div>
 
-        {activeTab !== 'leaderboard' && availableCategories.length > 1 && (
+        {activeTab !== 'leaderboard' && activeTab !== 'luck' && availableCategories.length > 1 && (
           <div className="relative group w-full overflow-hidden">
             <div 
               ref={scrollContainerRef}
@@ -288,7 +300,9 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
           </div>
         )}
 
-        {activeTab === 'leaderboard' ? (
+        {activeTab === 'luck' ? (
+          <LuckTab state={state} lang={lang} />
+        ) : activeTab === 'leaderboard' ? (
           <LeaderboardView state={state} lang={lang} onSelectCoin={onSelectCoin} />
         ) : (
           <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">

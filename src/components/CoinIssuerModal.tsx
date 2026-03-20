@@ -17,10 +17,11 @@ export function CoinIssuerModal({ state, onClose, onIssue, onImport, lang }: Coi
   const [totalSupply, setTotalSupply] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('Others');
-  const [issueType, setIssueType] = useState<'coin' | 'etf' | 'leveraged'>('coin');
+  const [issueType, setIssueType] = useState<'coin' | 'etf' | 'leveraged' | 'luck'>('coin');
   const [selectedComponents, setSelectedComponents] = useState<string[]>([]);
   const [underlyingId, setUnderlyingId] = useState('');
   const [leverageFactor, setLeverageFactor] = useState('2');
+  const [targetDigit, setTargetDigit] = useState('units');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const CATEGORIES = [
@@ -52,9 +53,11 @@ export function CoinIssuerModal({ state, onClose, onIssue, onImport, lang }: Coi
       typeCoin: '普通貨幣',
       typeETF: 'ETF',
       typeLeveraged: '槓桿代幣',
+      typeLuck: 'Luck (雙龍鬥)',
       underlying: '標的資產',
       leverage: '槓桿倍數',
       components: '選擇成分幣',
+      targetDigit: '猜測位數',
       submit: '確認發行',
       cancel: '取消',
       note: '註：新資產將於發行日後 2 天正式上市交易。',
@@ -74,9 +77,11 @@ export function CoinIssuerModal({ state, onClose, onIssue, onImport, lang }: Coi
       typeCoin: 'Normal Coin',
       typeETF: 'ETF',
       typeLeveraged: 'Leveraged Token',
+      typeLuck: 'Luck (Double Dragon)',
       underlying: 'Underlying Asset',
       leverage: 'Leverage Factor',
       components: 'Select Components',
+      targetDigit: 'Target Digit',
       submit: 'Issue',
       cancel: 'Cancel',
       note: 'Note: The new asset will start trading 2 days after issuance.',
@@ -88,9 +93,22 @@ export function CoinIssuerModal({ state, onClose, onIssue, onImport, lang }: Coi
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !symbol || !initialPrice || !totalSupply) return;
+    if (issueType !== 'luck' && (!name || !symbol || !initialPrice || !totalSupply)) return;
+    if (issueType === 'luck' && (!name || !symbol || !underlyingId)) return;
     if (issueType === 'etf' && selectedComponents.length === 0) return;
     if (issueType === 'leveraged' && !underlyingId) return;
+
+    if (issueType === 'luck') {
+      onIssue({
+        isLuck: true,
+        name,
+        symbol: symbol.toUpperCase(),
+        underlyingId,
+        targetDigit,
+        description
+      });
+      return;
+    }
 
     onIssue({
       name,
@@ -189,7 +207,7 @@ export function CoinIssuerModal({ state, onClose, onIssue, onImport, lang }: Coi
           <form id="issue-form" onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{t.type}</label>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-4 gap-2">
                 <button
                   type="button"
                   onClick={() => setIssueType('coin')}
@@ -223,6 +241,17 @@ export function CoinIssuerModal({ state, onClose, onIssue, onImport, lang }: Coi
                 >
                   {t.typeLeveraged}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setIssueType('luck')}
+                  className={`px-3 py-2 text-xs font-medium rounded-lg border transition-colors ${
+                    issueType === 'luck'
+                      ? 'bg-indigo-500 text-white border-indigo-500'
+                      : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  {t.typeLuck}
+                </button>
               </div>
             </div>
 
@@ -234,7 +263,7 @@ export function CoinIssuerModal({ state, onClose, onIssue, onImport, lang }: Coi
                 value={name}
                 onChange={e => setName(e.target.value)}
                 className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
-                placeholder={issueType === 'etf' ? "e.g. Top 10 Crypto Index" : (issueType === 'leveraged' ? "e.g. BTC Long 3x" : "e.g. Bitcoin")}
+                placeholder={issueType === 'luck' ? "e.g. Double Dragon BTC" : issueType === 'etf' ? "e.g. Top 10 Crypto Index" : (issueType === 'leveraged' ? "e.g. BTC Long 3x" : "e.g. Bitcoin")}
               />
             </div>
             <div>
@@ -245,34 +274,39 @@ export function CoinIssuerModal({ state, onClose, onIssue, onImport, lang }: Coi
                 value={symbol}
                 onChange={e => setSymbol(e.target.value)}
                 className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white uppercase"
-                placeholder={issueType === 'etf' ? "e.g. TOP10" : (issueType === 'leveraged' ? "e.g. BTC3L" : "e.g. BTC")}
+                placeholder={issueType === 'luck' ? "e.g. CRLUCK-C-BTC" : issueType === 'etf' ? "e.g. TOP10" : (issueType === 'leveraged' ? "e.g. BTC3L" : "e.g. BTC")}
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t.price}</label>
-              <input 
-                type="number" 
-                required
-                min="0.00000001"
-                step="any"
-                value={initialPrice}
-                onChange={e => setInitialPrice(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
-                placeholder="e.g. 50000"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t.supply}</label>
-              <input 
-                type="number" 
-                required
-                min="1"
-                value={totalSupply}
-                onChange={e => setTotalSupply(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
-                placeholder="e.g. 21000000"
-              />
-            </div>
+
+            {issueType !== 'luck' && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t.price}</label>
+                  <input 
+                    type="number" 
+                    required
+                    min="0.00000001"
+                    step="any"
+                    value={initialPrice}
+                    onChange={e => setInitialPrice(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                    placeholder="e.g. 50000"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t.supply}</label>
+                  <input 
+                    type="number" 
+                    required
+                    min="1"
+                    value={totalSupply}
+                    onChange={e => setTotalSupply(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                    placeholder="e.g. 21000000"
+                  />
+                </div>
+              </>
+            )}
 
             {issueType === 'coin' && (
               <div>
@@ -315,6 +349,41 @@ export function CoinIssuerModal({ state, onClose, onIssue, onImport, lang }: Coi
                     {LEVERAGE_OPTIONS.map(opt => (
                       <option key={opt.value} value={opt.value}>{opt.label}</option>
                     ))}
+                  </select>
+                </div>
+              </>
+            )}
+
+            {issueType === 'luck' && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t.underlying}</label>
+                  <select
+                    value={underlyingId}
+                    onChange={e => setUnderlyingId(e.target.value)}
+                    required
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                  >
+                    <option value="index">Weighted Index</option>
+                    {availableCoins.map(coin => (
+                      <option key={coin.id} value={coin.id}>{coin.symbol} - {coin.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t.targetDigit}</label>
+                  <select
+                    value={targetDigit}
+                    onChange={e => setTargetDigit(e.target.value as any)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                  >
+                    <option value="units">Units (個位數)</option>
+                    <option value="tens">Tens (十位數)</option>
+                    <option value="hundreds">Hundreds (百位數)</option>
+                    <option value="thousands">Thousands (千位數)</option>
+                    <option value="ten_thousands">Ten Thousands (萬位數)</option>
+                    <option value="decimal_1">1st Decimal (小數第一位)</option>
+                    <option value="decimal_2">2nd Decimal (小數第二位)</option>
                   </select>
                 </div>
               </>

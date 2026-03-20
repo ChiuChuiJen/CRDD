@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { parseCoins, parseEvents, Coin, MarketEvent, ImpactLevel } from './data/parser';
-import { initializeSimulation, tickSimulation, SimulationState } from './lib/simulation';
+import { initializeSimulation, tickSimulation, SimulationState, LuckEvent, getLuckEventSchedule } from './lib/simulation';
 import { Header } from './components/Header';
 import { Dashboard } from './components/Dashboard';
 import { CoinModal } from './components/CoinModal';
@@ -156,6 +156,47 @@ export default function App() {
   };
 
   const handleIssueCoin = (data: any) => {
+    if (data.isLuck) {
+      if (!state) return;
+      const now = state.currentTime;
+      // Calculate schedule for the current month
+      const d = new Date(now);
+      const schedule = getLuckEventSchedule(d.getFullYear(), d.getMonth());
+      
+      // Find the next available slot or just use the first one
+      // For a custom issued luck event, we can just set the dates relative to now
+      const listDate = now;
+      const stopTradingDate = now + 6 * 24 * 60 * 60 * 1000; // 6 days later
+      const settlementDate = now + 7 * 24 * 60 * 60 * 1000; // 7 days later
+      const delistDate = now + 8 * 24 * 60 * 60 * 1000; // 8 days later
+
+      const settleDateStr = new Date(settlementDate).toISOString().slice(0, 10).replace(/-/g, '');
+      // Use the provided symbol or generate one
+      const eventId = data.symbol || `CRLUCK-C-${data.underlyingId}-${settleDateStr}`;
+
+      const newLuckEvent: LuckEvent = {
+        id: eventId,
+        targetType: data.underlyingId === 'index' ? 'index' : 'coin',
+        targetId: data.underlyingId,
+        targetDigit: data.targetDigit || 'units',
+        listDate,
+        stopTradingDate,
+        settlementDate,
+        delistDate,
+        status: 'active',
+        bets: []
+      };
+
+      setState(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          luckEvents: [...prev.luckEvents, newLuckEvent]
+        };
+      });
+      setIsIssuerOpen(false);
+      return;
+    }
     handleImportCoins([data]);
   };
 
