@@ -128,9 +128,12 @@ export default function App() {
         issueDate: now,
         tradingDate: tradingDate,
         isETF: data.isETF,
+        isLeveraged: data.isLeveraged,
+        leverageFactor: data.leverageFactor,
+        underlyingId: data.underlyingId,
         components: data.components,
         isCustom: true,
-        category: data.category || (data.isETF ? 'ETF' : 'Others')
+        category: data.category || (data.isETF ? 'ETF' : (data.isLeveraged ? 'Leveraged' : 'Others'))
       };
 
       // Fix retail calculation

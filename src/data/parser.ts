@@ -40,6 +40,9 @@ export interface Coin {
   tradingDate?: number;
   issueDate?: number;
   isETF?: boolean;
+  isLeveraged?: boolean;
+  leverageFactor?: number; // e.g., 2, 3, 5, -1, -2, -3, -5
+  underlyingId?: string;
   components?: string[];
   isCustom?: boolean;
   category?: string;

@@ -171,7 +171,25 @@ export function tickSimulation(
     let newLastNoise = coin.lastNoise || 0;
 
     if (isTrading) {
-      if (coin.isETF && coin.components && coin.components.length > 0) {
+      if (coin.isLeveraged && coin.underlyingId) {
+        const underlyingReturn = coinReturns[coin.underlyingId] || 0;
+        const leverage = coin.leverageFactor || 1;
+        
+        // Leveraged return = underlying return * leverage
+        priceChangeRatio = underlyingReturn * leverage;
+        
+        // Add small tracking error
+        priceChangeRatio += (Math.random() - 0.5) * 0.001;
+        
+        // Apply management fee (0.08% daily) at the start of a new day
+        if (isNewDay) {
+          priceChangeRatio -= 0.0008;
+        }
+
+        newPrice = coin.price * (1 + priceChangeRatio);
+        if (newPrice < 0.00000001) newPrice = 0.00000001;
+        priceChangeRatio = (newPrice - coin.price) / coin.price;
+      } else if (coin.isETF && coin.components && coin.components.length > 0) {
         let totalReturn = 0;
         let validComponents = 0;
         for (const compId of coin.components) {
@@ -350,14 +368,14 @@ export function tickSimulation(
     });
   };
 
-  // Process normal coins first
+  // Process normal coins first (not ETF and not Leveraged)
   for (const coin of state.coins) {
-    if (!coin.isETF) processCoin(coin);
+    if (!coin.isETF && !coin.isLeveraged) processCoin(coin);
   }
 
-  // Process ETFs
+  // Process ETFs and Leveraged tokens (which depend on normal coins)
   for (const coin of state.coins) {
-    if (coin.isETF) processCoin(coin);
+    if (coin.isETF || coin.isLeveraged) processCoin(coin);
   }
 
   const newIndexValue = state.indexValue * (1 + indexChangeRatio);
