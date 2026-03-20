@@ -6,7 +6,7 @@ export interface SimulationState {
   indexValue: number;
   indexHistory: { time: number, price: number }[];
   indexDailyHistory: { date: number, open: number, high: number, low: number, close: number }[];
-  activeEvents: { event: MarketEvent, targetCoinId?: string, impact: number, expiresAt: number }[];
+  activeEvents: { event: MarketEvent, targetCoinId?: string, targetCategory?: string, impact: number, expiresAt: number }[];
   news: { time: number, text: string }[];
   top50Ids: string[];
 }
@@ -93,6 +93,7 @@ export function tickSimulation(
   state: SimulationState, 
   eventsA: MarketEvent[], 
   eventsB: MarketEvent[], 
+  eventsC: MarketEvent[],
   impacts: ImpactLevel[]
 ): SimulationState {
   const TICK_MS = 10 * 60 * 1000; // 10 minutes
@@ -108,8 +109,21 @@ export function tickSimulation(
   if (isNewDay) {
     const numEvents = Math.floor(Math.random() * 5); // 0 to 4 events
     for (let i = 0; i < numEvents; i++) {
-      const isMarketWide = Math.random() > 0.8; // 20% chance for market-wide
-      const eventList = isMarketWide ? eventsB : eventsA;
+      const randType = Math.random();
+      let eventList: MarketEvent[];
+      let isMarketWide = false;
+      let isCategory = false;
+
+      if (randType > 0.8) {
+        eventList = eventsB;
+        isMarketWide = true;
+      } else if (randType > 0.5) {
+        eventList = eventsC;
+        isCategory = true;
+      } else {
+        eventList = eventsA;
+      }
+
       const event = eventList[Math.floor(Math.random() * eventList.length)];
       
       // Determine impact
@@ -132,18 +146,33 @@ export function tickSimulation(
         impactValue = selectedImpact.min + Math.random() * (selectedImpact.max - selectedImpact.min);
       }
 
-      const targetCoinId = isMarketWide ? undefined : state.coins[Math.floor(Math.random() * state.coins.length)].id;
+      let targetCoinId: string | undefined;
+      let targetCategory: string | undefined;
+
+      if (isMarketWide) {
+        targetCoinId = undefined;
+      } else if (isCategory) {
+        targetCategory = event.targetCategory;
+      } else {
+        targetCoinId = state.coins[Math.floor(Math.random() * state.coins.length)].id;
+      }
       
       newEvents.push({
         event,
         targetCoinId,
+        targetCategory,
         impact: impactValue,
         expiresAt: newTime + 24 * 60 * 60 * 1000 // 1 day duration
       });
 
+      let newsPrefix = '';
+      if (isMarketWide) newsPrefix = '【全市場】';
+      else if (isCategory) newsPrefix = `【${targetCategory}】`;
+      else newsPrefix = `【${targetCoinId}】`;
+
       newNews.unshift({
         time: newTime,
-        text: `${isMarketWide ? '【全市場】' : `【${targetCoinId}】`}${event.description}`
+        text: `${newsPrefix}${event.description}`
       });
     }
 
@@ -219,10 +248,18 @@ export function tickSimulation(
 
         // Apply active events
         for (const ev of newEvents) {
-          if (!ev.targetCoinId || ev.targetCoinId === coin.id) {
-            // Event impact is spread over the day (144 ticks)
+          if (!ev.targetCoinId && !ev.targetCategory) {
+            // Market-wide
             mu += ev.impact / dt / 144; 
-            newSentiment += ev.impact * 10; // Events directly impact sentiment
+            newSentiment += ev.impact * 10;
+          } else if (ev.targetCategory && ev.targetCategory === coin.category) {
+            // Category-wide
+            mu += ev.impact / dt / 144; 
+            newSentiment += ev.impact * 10;
+          } else if (ev.targetCoinId === coin.id) {
+            // Individual
+            mu += ev.impact / dt / 144; 
+            newSentiment += ev.impact * 10;
           }
         }
 
@@ -239,7 +276,28 @@ export function tickSimulation(
           mu += 0.5;
         }
 
-        // 1. Heston Model: Update variance (Volatility Clustering)
+        // Regime-Switching
+        let newRegime = coin.regime || 'sideways';
+        if (Math.random() < 5.0 * dt) { // Transition probability
+          const regimes: ('bull' | 'bear' | 'sideways')[] = ['bull', 'bear', 'sideways'];
+          newRegime = regimes[Math.floor(Math.random() * regimes.length)];
+        }
+        if (newRegime === 'bull') {
+          mu += 0.5;
+        } else if (newRegime === 'bear') {
+          mu -= 0.5;
+        }
+
+        // Hawkes Process (Self-exciting jumps)
+        let newHawkesLambda = coin.hawkesLambda || 0;
+        const hawkesMu = coin.hawkesMu || 0.1;
+        const hawkesAlpha = coin.hawkesAlpha || 0.2;
+        const hawkesBeta = coin.hawkesBeta || 1.0;
+        
+        // Decay intensity
+        newHawkesLambda = newHawkesLambda + hawkesBeta * (hawkesMu - newHawkesLambda) * dt;
+
+        // 1. Heston Model: Update variance (Volatility Clustering / GARCH-like)
         const kappa = coin.kappa || 2.0;
         const theta = coin.theta || Math.pow(coin.volatility, 2);
         const xi = coin.xi || 0.1;
@@ -256,23 +314,54 @@ export function tickSimulation(
         newLastNoise = phi * newLastNoise + epsilon * Math.sqrt(1 - phi * phi);
         const dW_s = newLastNoise * Math.sqrt(dt);
 
-        // 3. Merton Jump Diffusion: Poisson process for sudden jumps
-        const lambda = coin.lambda || 2.0;
-        const muJ = coin.muJ || 0;
-        const sigmaJ = coin.sigmaJ || 0.1;
+        // 3. Jump Diffusion (Merton + Kou + Hawkes)
+        const baseLambda = coin.lambda || 2.0;
+        const totalLambda = baseLambda + newHawkesLambda;
         
         let jumpMultiplier = 1;
         // Probability of jump in this dt
-        if (Math.random() < lambda * dt) {
-          const jumpSize = muJ + sigmaJ * randn_bm();
-          jumpMultiplier = Math.exp(jumpSize);
+        if (Math.random() < totalLambda * dt) {
+          // Jump occurred! Self-excite Hawkes
+          newHawkesLambda += hawkesAlpha;
+
+          if (Math.random() < 0.5) {
+            // Merton Jump
+            const muJ = coin.muJ || 0;
+            const sigmaJ = coin.sigmaJ || 0.1;
+            const jumpSize = muJ + sigmaJ * randn_bm();
+            jumpMultiplier = Math.exp(jumpSize);
+          } else {
+            // Kou Jump (Double Exponential)
+            const kouP = coin.kouP || 0.5;
+            const kouEta1 = coin.kouEta1 || 10;
+            const kouEta2 = coin.kouEta2 || 10;
+            let jumpSize = 0;
+            if (Math.random() < kouP) {
+              jumpSize = -Math.log(Math.random()) / kouEta1; // Up jump
+            } else {
+              jumpSize = Math.log(Math.random()) / kouEta2; // Down jump
+            }
+            jumpMultiplier = Math.exp(jumpSize);
+          }
         }
 
         // Combine models for price step
-        const dS = mu * coin.price * dt + currentVolatility * coin.price * dW_s;
+        let dS = 0;
+        if (coin.ouReversion && coin.ouMean) {
+          // OU Model (Mean Reversion, e.g., for Stablecoins)
+          dS = coin.ouReversion * (coin.ouMean - coin.price) * dt + currentVolatility * coin.price * dW_s;
+        } else {
+          // GBM / Bates Model
+          dS = mu * coin.price * dt + currentVolatility * coin.price * dW_s;
+        }
+        
         newPrice = (coin.price + dS) * jumpMultiplier;
 
-        if (newPrice < 0.00000001) newPrice = 0.00000001; // Prevent negative or zero
+        if (coin.isStablecoin) {
+          newPrice = Math.max(0.995, Math.min(1.005, newPrice));
+        } else if (newPrice < 0.00000001) {
+          newPrice = 0.00000001; // Prevent negative or zero
+        }
 
         priceChangeRatio = (newPrice - coin.price) / coin.price;
       }

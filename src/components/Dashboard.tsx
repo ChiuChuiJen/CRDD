@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { SimulationState } from '../lib/simulation';
 import { Coin } from '../data/parser';
 import { ArrowUpRight, ArrowDownRight, Activity, ChevronUp, ChevronDown, ArrowUpDown, Trophy } from 'lucide-react';
@@ -17,7 +17,7 @@ type SortDirection = 'asc' | 'desc';
 export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
   const [sortColumn, setSortColumn] = useState<SortColumn>('coin');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
-  const [activeTab, setActiveTab] = useState<'all' | 'etf' | 'leveraged' | 'leaderboard'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'etf' | 'leveraged' | 'stablecoin' | 'leaderboard'>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -68,6 +68,7 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
       coins: '市場行情',
       etfs: 'ETF',
       leveraged: '槓桿代幣',
+      stablecoin: '穩定幣',
       leaderboard: '榜單',
       news: '公告及新聞',
       top50: '權值股 (Top 50)',
@@ -83,6 +84,7 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
       coins: 'Market',
       etfs: 'ETFs',
       leveraged: 'Leveraged',
+      stablecoin: 'Stablecoin',
       leaderboard: 'Leaderboard',
       news: 'News & Announcements',
       top50: 'Weighted (Top 50)',
@@ -113,20 +115,21 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
   const filterFn = (coin: Coin) => {
     if (activeTab === 'etf') return coin.isETF;
     if (activeTab === 'leveraged') return coin.isLeveraged;
-    return !coin.isETF && !coin.isLeveraged;
+    if (activeTab === 'stablecoin') return coin.isStablecoin;
+    return !coin.isETF && !coin.isLeveraged && !coin.isStablecoin;
   };
 
   const availableCategories = Array.from(
     new Set(
       state.coins
         .filter(filterFn)
-        .map(c => c.category || (c.isETF ? 'ETF' : (c.isLeveraged ? 'Leveraged' : 'Others')))
+        .map(c => c.category || (c.isETF ? 'ETF' : (c.isLeveraged ? 'Leveraged' : (c.isStablecoin ? 'Stablecoin' : 'Others'))))
     )
   ).sort();
 
   const coinsWithStats = state.coins
     .filter(filterFn)
-    .filter(coin => selectedCategory === 'All' || (coin.category || (coin.isETF ? 'ETF' : (coin.isLeveraged ? 'Leveraged' : 'Others'))) === selectedCategory)
+    .filter(coin => selectedCategory === 'All' || (coin.category || (coin.isETF ? 'ETF' : (coin.isLeveraged ? 'Leveraged' : (coin.isStablecoin ? 'Stablecoin' : 'Others')))) === selectedCategory)
     .map(coin => {
       const isTop50 = state.top50Ids.includes(coin.id);
     const startPrice = coin.dailyHistory.length > 0 ? coin.dailyHistory[coin.dailyHistory.length - 1].open : coin.initialPrice;
@@ -217,6 +220,16 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
                 {t.leveraged}
               </button>
               <button
+                onClick={() => { setActiveTab('stablecoin'); setSelectedCategory('All'); }}
+                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                  activeTab === 'stablecoin'
+                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+                }`}
+              >
+                {t.stablecoin}
+              </button>
+              <button
                 onClick={() => { setActiveTab('leaderboard'); setSelectedCategory('All'); }}
                 className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-1 ${
                   activeTab === 'leaderboard'
@@ -230,7 +243,7 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
             </div>
           </div>
           <div className="text-sm text-slate-500 dark:text-slate-400">
-            {activeTab === 'leaderboard' ? '' : `${coinsWithStats.length} ${activeTab === 'etf' ? 'ETFs' : (activeTab === 'leveraged' ? 'Leveraged Tokens' : 'Coins')} Listed`}
+            {activeTab === 'leaderboard' ? '' : `${coinsWithStats.length} ${activeTab === 'etf' ? 'ETFs' : (activeTab === 'leveraged' ? 'Leveraged Tokens' : (activeTab === 'stablecoin' ? 'Stablecoins' : 'Coins'))} Listed`}
           </div>
         </div>
 
@@ -340,7 +353,7 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
                             <div className="font-semibold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors flex items-center gap-2">
                               {coin.symbol}
                               <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                                {coin.category || (coin.isETF ? 'ETF' : (coin.isLeveraged ? 'Leveraged' : 'Others'))}
+                                {coin.category || (coin.isETF ? 'ETF' : (coin.isLeveraged ? 'Leveraged' : (coin.isStablecoin ? 'Stablecoin' : 'Others')))}
                               </span>
                             </div>
                             <div className="text-xs text-slate-500 dark:text-slate-400">{coin.name}</div>

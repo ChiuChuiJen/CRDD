@@ -10,7 +10,7 @@ import { SentimentModal } from './components/SentimentModal';
 
 export default function App() {
   const [state, setState] = useState<SimulationState | null>(null);
-  const [events, setEvents] = useState<{ eventsA: MarketEvent[], eventsB: MarketEvent[], impacts: ImpactLevel[] } | null>(null);
+  const [events, setEvents] = useState<{ eventsA: MarketEvent[], eventsB: MarketEvent[], eventsC: MarketEvent[], impacts: ImpactLevel[] } | null>(null);
   
   const [isRunning, setIsRunning] = useState(true); // Always true now
   const [speed, setSpeed] = useState(1);
@@ -44,7 +44,7 @@ export default function App() {
     if (isRunning && state && events) {
       const interval = 1000 / speed;
       timerRef.current = setInterval(() => {
-        setState(prev => prev ? tickSimulation(prev, events.eventsA, events.eventsB, events.impacts) : prev);
+        setState(prev => prev ? tickSimulation(prev, events.eventsA, events.eventsB, events.eventsC, events.impacts) : prev);
       }, interval);
     } else if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -63,7 +63,7 @@ export default function App() {
           const currentDay = new Date(prev.currentTime).getDate();
           let nextState = prev;
           while (new Date(nextState.currentTime).getDate() === currentDay) {
-            nextState = tickSimulation(nextState, events.eventsA, events.eventsB, events.impacts);
+            nextState = tickSimulation(nextState, events.eventsA, events.eventsB, events.eventsC, events.impacts);
           }
           return nextState;
         });
@@ -78,7 +78,7 @@ export default function App() {
     let nextState = state;
     // Tick until day changes
     while (new Date(nextState.currentTime).getDate() === currentDay) {
-      nextState = tickSimulation(nextState, events.eventsA, events.eventsB, events.impacts);
+      nextState = tickSimulation(nextState, events.eventsA, events.eventsB, events.eventsC, events.impacts);
     }
     setState(nextState);
   };

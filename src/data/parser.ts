@@ -37,10 +37,25 @@ export interface Coin {
   sigmaJ: number; // Merton jump volatility
   hurst: number; // Hurst exponent
   lastNoise: number; // For Hurst approximation
+  
+  // New Models
+  ouMean?: number; // Ornstein-Uhlenbeck mean
+  ouReversion?: number; // Ornstein-Uhlenbeck reversion rate
+  regime?: 'bull' | 'bear' | 'sideways'; // Regime-Switching state
+  kouLambda?: number; // Kou jump intensity
+  kouP?: number; // Kou probability of up jump
+  kouEta1?: number; // Kou up jump rate
+  kouEta2?: number; // Kou down jump rate
+  hawkesLambda?: number; // Hawkes current intensity
+  hawkesMu?: number; // Hawkes baseline intensity
+  hawkesAlpha?: number; // Hawkes jump impact
+  hawkesBeta?: number; // Hawkes decay rate
+  
   tradingDate?: number;
   issueDate?: number;
   isETF?: boolean;
   isLeveraged?: boolean;
+  isStablecoin?: boolean;
   leverageFactor?: number; // e.g., 2, 3, 5, -1, -2, -3, -5
   underlyingId?: string;
   components?: string[];
@@ -50,8 +65,9 @@ export interface Coin {
 
 export interface MarketEvent {
   id: string;
-  type: 'A' | 'B'; // A: Individual, B: Market-wide
+  type: 'A' | 'B' | 'C'; // A: Individual, B: Market-wide, C: Category
   description: string;
+  targetCategory?: string;
 }
 
 export interface ImpactLevel {
@@ -98,6 +114,8 @@ export function parseCoins(): Coin[] {
     const staked = Math.random() * 40 + 10; // 10% to 50% staked
     const circulating = 100 - locked - staked;
 
+    const isStablecoin = symbol === 'CRDT';
+
     return {
       id: symbol,
       name: namePart,
@@ -107,7 +125,7 @@ export function parseCoins(): Coin[] {
       totalSupply,
       marketCap,
       description,
-      category,
+      category: isStablecoin ? 'Stablecoin' : category,
       volume24h: Math.random() * marketCap * 0.01, // Random initial 24h volume
       volume30d: Math.random() * marketCap * 0.1, // Random initial volume
       history: [{ time: Date.now(), price }],
@@ -123,29 +141,59 @@ export function parseCoins(): Coin[] {
         staked,
         locked
       },
-      sentiment: (Math.random() - 0.5) * 10, // -5 to 5 initial sentiment
-      volatility: Math.random() * 0.05 + 0.01, // 1% to 6% base volatility
-      drift: (Math.random() - 0.5) * 0.001, // Slight drift
-      variance: Math.pow(Math.random() * 0.05 + 0.01, 2), // Initial variance
-      kappa: Math.random() * 2 + 1, // Mean reversion rate (1 to 3)
-      theta: Math.pow(Math.random() * 0.05 + 0.01, 2), // Long-term variance
-      xi: Math.random() * 0.2 + 0.05, // Vol of vol
-      lambda: Math.random() * 5 + 1, // Jumps per year
-      muJ: (Math.random() - 0.5) * 0.1, // Mean jump size
-      sigmaJ: Math.random() * 0.1 + 0.05, // Jump volatility
-      hurst: Math.random() * 0.4 + 0.3, // Hurst exponent (0.3 to 0.7)
-      lastNoise: 0
+      sentiment: isStablecoin ? 0 : (Math.random() - 0.5) * 10, // -5 to 5 initial sentiment
+      volatility: isStablecoin ? 0.0001 : Math.random() * 0.05 + 0.01, // 1% to 6% base volatility
+      drift: isStablecoin ? 0 : (Math.random() - 0.5) * 0.001, // Slight drift
+      variance: isStablecoin ? 0.00000001 : Math.pow(Math.random() * 0.05 + 0.01, 2), // Initial variance
+      kappa: isStablecoin ? 100 : Math.random() * 2 + 1, // Mean reversion rate (1 to 3)
+      theta: isStablecoin ? 0.00000001 : Math.pow(Math.random() * 0.05 + 0.01, 2), // Long-term variance
+      xi: isStablecoin ? 0.001 : Math.random() * 0.2 + 0.05, // Vol of vol
+      lambda: isStablecoin ? 0 : Math.random() * 5 + 1, // Jumps per year
+      muJ: isStablecoin ? 0 : (Math.random() - 0.5) * 0.1, // Mean jump size
+      sigmaJ: isStablecoin ? 0 : Math.random() * 0.1 + 0.05, // Jump volatility
+      hurst: isStablecoin ? 0.5 : Math.random() * 0.4 + 0.3, // Hurst exponent (0.3 to 0.7)
+      lastNoise: 0,
+      
+      // New Models
+      ouMean: isStablecoin ? 1.0 : undefined,
+      ouReversion: isStablecoin ? 500 : undefined, // Strong mean reversion for stablecoin
+      regime: 'sideways',
+      kouLambda: isStablecoin ? 0 : Math.random() * 3 + 0.5,
+      kouP: 0.5,
+      kouEta1: 10,
+      kouEta2: 10,
+      hawkesLambda: isStablecoin ? 0 : Math.random() * 0.5,
+      hawkesMu: isStablecoin ? 0 : Math.random() * 0.2,
+      hawkesAlpha: isStablecoin ? 0 : Math.random() * 0.5 + 0.1,
+      hawkesBeta: isStablecoin ? 1 : Math.random() * 2 + 1,
+      
+      isStablecoin
     };
   });
 }
 
-export function parseEvents(): { eventsA: MarketEvent[], eventsB: MarketEvent[], impacts: ImpactLevel[] } {
+export function parseEvents(): { eventsA: MarketEvent[], eventsB: MarketEvent[], eventsC: MarketEvent[], impacts: ImpactLevel[] } {
   const lines = eventsRaw.split('\n').map(l => l.trim());
   const eventsA: MarketEvent[] = [];
   const eventsB: MarketEvent[] = [];
+  const eventsC: MarketEvent[] = [];
   const impacts: ImpactLevel[] = [];
 
   let currentSection = '';
+
+  const categoryMap: Record<string, string> = {
+    'AI': 'AI & Data',
+    'DF': 'DeFi & Finance',
+    'EN': 'Energy & Environment',
+    'IN': 'Infrastructure',
+    'L1': 'Layer 1',
+    'MM': 'Meme',
+    'MV': 'Metaverse',
+    'PY': 'Payment',
+    'PS': 'Privacy & Security',
+    'SD': 'Storage & Data',
+    'OT': 'Others'
+  };
 
   for (const line of lines) {
     if (!line) continue;
@@ -154,6 +202,9 @@ export function parseEvents(): { eventsA: MarketEvent[], eventsB: MarketEvent[],
       continue;
     } else if (line.includes('【B類：全體市場事件')) {
       currentSection = 'B';
+      continue;
+    } else if (line.includes('【C類：類別事件】')) {
+      currentSection = 'C';
       continue;
     } else if (line.includes('【影響範圍跟機率】')) {
       currentSection = 'Impact';
@@ -166,6 +217,11 @@ export function parseEvents(): { eventsA: MarketEvent[], eventsB: MarketEvent[],
     } else if (currentSection === 'B' && line.startsWith('B')) {
       const [id, desc] = line.split('｜');
       eventsB.push({ id, type: 'B', description: desc });
+    } else if (currentSection === 'C' && /^[A-Z]{2}\d{2}｜/.test(line)) {
+      const [id, desc] = line.split('｜');
+      const prefix = id.substring(0, 2);
+      const targetCategory = categoryMap[prefix] || 'Others';
+      eventsC.push({ id, type: 'C', description: desc, targetCategory });
     } else if (currentSection === 'Impact' && /^\d{2}｜/.test(line)) {
       // Example: 01｜極微影響（±0.1% ～ ±0.5%）：32%
       const match = line.match(/(\d{2})｜.*?（([±+-]?[\d.]+)% ～ ([±+-]?[\d.]+)%）：([\d.]+)%/);
@@ -188,5 +244,5 @@ export function parseEvents(): { eventsA: MarketEvent[], eventsB: MarketEvent[],
     }
   }
 
-  return { eventsA, eventsB, impacts };
+  return { eventsA, eventsB, eventsC, impacts };
 }
