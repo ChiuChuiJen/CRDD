@@ -27,8 +27,9 @@ function gbmStep(S: number, mu: number, sigma: number, dt: number): number {
 }
 
 export function initializeSimulation(coins: Coin[]): SimulationState {
-  // Determine initial top 50
-  const sorted = [...coins].sort((a, b) => b.volume30d - a.volume30d);
+  // Determine initial top 50 (only normal coins, no ETFs or Leveraged tokens)
+  const eligibleCoins = coins.filter(c => !c.isETF && !c.isLeveraged);
+  const sorted = [...eligibleCoins].sort((a, b) => b.volume30d - a.volume30d);
   const top50Ids = sorted.slice(0, 50).map(c => c.id);
 
   const now = Date.now();
@@ -404,7 +405,8 @@ export function tickSimulation(
   // Update top 50 every 30 days (roughly 30 * 144 ticks)
   let newTop50Ids = state.top50Ids;
   if (newTime % (30 * 24 * 60 * 60 * 1000) < TICK_MS) {
-    const sorted = [...newCoins].sort((a, b) => b.volume30d - a.volume30d);
+    const eligibleCoins = newCoins.filter(c => !c.isETF && !c.isLeveraged);
+    const sorted = [...eligibleCoins].sort((a, b) => b.volume30d - a.volume30d);
     newTop50Ids = sorted.slice(0, 50).map(c => c.id);
   }
 

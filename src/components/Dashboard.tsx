@@ -17,7 +17,7 @@ type SortDirection = 'asc' | 'desc';
 export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
   const [sortColumn, setSortColumn] = useState<SortColumn>('coin');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
-  const [activeTab, setActiveTab] = useState<'all' | 'etf' | 'leaderboard'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'etf' | 'leveraged' | 'leaderboard'>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -67,6 +67,7 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
     zh: {
       coins: '市場行情',
       etfs: 'ETF',
+      leveraged: '槓桿代幣',
       leaderboard: '榜單',
       news: '公告及新聞',
       top50: '權值股 (Top 50)',
@@ -81,6 +82,7 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
     en: {
       coins: 'Market',
       etfs: 'ETFs',
+      leveraged: 'Leveraged',
       leaderboard: 'Leaderboard',
       news: 'News & Announcements',
       top50: 'Weighted (Top 50)',
@@ -108,16 +110,22 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
     return sortDirection === 'asc' ? <ChevronUp size={14} className="text-indigo-500" /> : <ChevronDown size={14} className="text-indigo-500" />;
   };
 
+  const filterFn = (coin: Coin) => {
+    if (activeTab === 'etf') return coin.isETF;
+    if (activeTab === 'leveraged') return coin.isLeveraged;
+    return !coin.isETF && !coin.isLeveraged;
+  };
+
   const availableCategories = Array.from(
     new Set(
       state.coins
-        .filter(coin => activeTab === 'etf' ? coin.isETF : !coin.isETF)
+        .filter(filterFn)
         .map(c => c.category || (c.isETF ? 'ETF' : (c.isLeveraged ? 'Leveraged' : 'Others')))
     )
   ).sort();
 
   const coinsWithStats = state.coins
-    .filter(coin => activeTab === 'etf' ? coin.isETF : !coin.isETF)
+    .filter(filterFn)
     .filter(coin => selectedCategory === 'All' || (coin.category || (coin.isETF ? 'ETF' : (coin.isLeveraged ? 'Leveraged' : 'Others'))) === selectedCategory)
     .map(coin => {
       const isTop50 = state.top50Ids.includes(coin.id);
@@ -199,6 +207,16 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
                 {t.etfs}
               </button>
               <button
+                onClick={() => { setActiveTab('leveraged'); setSelectedCategory('All'); }}
+                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                  activeTab === 'leveraged'
+                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+                }`}
+              >
+                {t.leveraged}
+              </button>
+              <button
                 onClick={() => { setActiveTab('leaderboard'); setSelectedCategory('All'); }}
                 className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-1 ${
                   activeTab === 'leaderboard'
@@ -212,7 +230,7 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
             </div>
           </div>
           <div className="text-sm text-slate-500 dark:text-slate-400">
-            {activeTab === 'leaderboard' ? '' : `${coinsWithStats.length} ${activeTab === 'etf' ? 'ETFs' : 'Coins'} Listed`}
+            {activeTab === 'leaderboard' ? '' : `${coinsWithStats.length} ${activeTab === 'etf' ? 'ETFs' : (activeTab === 'leveraged' ? 'Leveraged Tokens' : 'Coins')} Listed`}
           </div>
         </div>
 

@@ -61,9 +61,14 @@ export function Header({
         <div className="py-4 border-b border-slate-900/10 lg:px-8 lg:border-0 dark:border-slate-300/10 px-4">
           <div className="relative flex items-center justify-between">
             <div className="flex items-center gap-6">
-              <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-emerald-500 to-teal-400">
-                {t.title}
-              </h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-emerald-500 to-teal-400">
+                  {t.title}
+                </h1>
+                <span className="px-2 py-0.5 text-[10px] font-mono font-medium rounded-full bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                  v1.1.0
+                </span>
+              </div>
               <div 
                 className="hidden md:flex flex-col cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/50 p-2 -m-2 rounded-lg transition-colors"
                 onClick={onOpenIndexModal}
