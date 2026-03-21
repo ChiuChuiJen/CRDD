@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { parseCoins, parseEvents, Coin, MarketEvent, ImpactLevel } from './data/parser';
+import { parseCoins, parseEvents, Coin, MarketEvent, ImpactLevel, NFT } from './data/parser';
 import { initializeSimulation, tickSimulation, SimulationState, LuckEvent, getLuckEventSchedule } from './lib/simulation';
 import { Header } from './components/Header';
 import { Dashboard } from './components/Dashboard';
@@ -7,6 +7,7 @@ import { CoinModal } from './components/CoinModal';
 import { IndexModal } from './components/IndexModal';
 import { CoinIssuerModal } from './components/CoinIssuerModal';
 import { SentimentModal } from './components/SentimentModal';
+import NFTModal from './components/NFTModal';
 
 export default function App() {
   const [state, setState] = useState<SimulationState | null>(null);
@@ -19,6 +20,7 @@ export default function App() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   
   const [selectedCoin, setSelectedCoin] = useState<Coin | null>(null);
+  const [selectedNFT, setSelectedNFT] = useState<NFT | null>(null);
   const [isIndexModalOpen, setIsIndexModalOpen] = useState(false);
   const [isIssuerOpen, setIsIssuerOpen] = useState(false);
   const [isSentimentModalOpen, setIsSentimentModalOpen] = useState(false);
@@ -133,7 +135,7 @@ export default function App() {
         underlyingId: data.underlyingId,
         components: data.components,
         isCustom: true,
-        category: data.category || (data.isETF ? 'ETF' : (data.isLeveraged ? 'Leveraged' : 'Others'))
+        category: data.isETF ? 'ETF' : (data.isLeveraged ? 'Leveraged' : (data.category || 'Others'))
       };
 
       // Fix retail calculation
@@ -156,6 +158,58 @@ export default function App() {
   };
 
   const handleIssueCoin = (data: any) => {
+    if (data.isNFT) {
+      if (!state) return;
+      const now = state.currentTime;
+      const newNFT: NFT = {
+        id: data.symbol,
+        name: data.name,
+        symbol: data.symbol,
+        type: data.nftType,
+        rarity: data.nftRarity as any,
+        author: 'User',
+        description: data.description,
+        utility: [data.nftUtility],
+        price: data.initialPrice,
+        initialPrice: data.initialPrice,
+        totalSupply: data.totalSupply,
+        marketCap: data.initialPrice * data.totalSupply,
+        volume24h: 0,
+        sentiment: 0,
+        isFractionalized: data.isFractionalized,
+        fractionRatio: data.isFractionalized ? 100 : 1,
+        history: [{ time: now, price: data.initialPrice }],
+        dailyHistory: [{ date: now, open: data.initialPrice, high: data.initialPrice, low: data.initialPrice, close: data.initialPrice }],
+        circulation: {
+          circulating: 100,
+          locked: 0,
+          staked: 0
+        },
+        chipDistribution: {
+          foreign: 0,
+          institution: 0,
+          largeHolder: 0,
+          retail: 100
+        },
+        volatility: Math.random() * 0.1 + 0.05,
+        drift: (Math.random() - 0.5) * 0.002,
+        variance: Math.pow(Math.random() * 0.1 + 0.05, 2),
+        kappa: Math.random() * 2 + 1,
+        theta: Math.pow(Math.random() * 0.1 + 0.05, 2),
+        xi: Math.random() * 0.3 + 0.1,
+        isCustom: true
+      };
+
+      setState(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          nfts: [...prev.nfts, newNFT]
+        };
+      });
+      setIsIssuerOpen(false);
+      return;
+    }
     if (data.isLuck) {
       if (!state) return;
       const now = state.currentTime;
@@ -220,7 +274,12 @@ export default function App() {
         onOpenSentimentModal={() => setIsSentimentModalOpen(true)}
       />
       <main className="container mx-auto p-4">
-        <Dashboard state={state} lang={lang} onSelectCoin={setSelectedCoin} />
+        <Dashboard 
+          state={state} 
+          lang={lang} 
+          onSelectCoin={setSelectedCoin} 
+          onSelectNFT={setSelectedNFT}
+        />
       </main>
       {selectedCoin && (
         <CoinModal 
@@ -229,6 +288,12 @@ export default function App() {
           onClose={() => setSelectedCoin(null)} 
           lang={lang} 
           theme={theme}
+        />
+      )}
+      {selectedNFT && (
+        <NFTModal
+          nft={selectedNFT}
+          onClose={() => setSelectedNFT(null)}
         />
       )}
       {isIndexModalOpen && (

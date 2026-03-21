@@ -1,24 +1,26 @@
 import React, { useState, useRef } from 'react';
 import { SimulationState } from '../lib/simulation';
-import { Coin } from '../data/parser';
-import { ArrowUpRight, ArrowDownRight, Activity, ChevronUp, ChevronDown, ArrowUpDown, Trophy, Dices } from 'lucide-react';
+import { Coin, NFT } from '../data/parser';
+import { ArrowUpRight, ArrowDownRight, Activity, ChevronUp, ChevronDown, ArrowUpDown, Trophy, Dices, Layers, Sparkles } from 'lucide-react';
 import { formatLargeNumber } from '../lib/format';
 import { LeaderboardView } from './LeaderboardView';
 import { LuckTab } from './LuckTab';
+import NFTTab from './NFTTab';
 
 interface DashboardProps {
   state: SimulationState;
   lang: 'zh' | 'en';
   onSelectCoin: (coin: Coin) => void;
+  onSelectNFT: (nft: NFT) => void;
 }
 
 type SortColumn = 'coin' | 'price' | 'change' | 'volume' | 'volume24h' | 'status';
 type SortDirection = 'asc' | 'desc';
 
-export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
+export function Dashboard({ state, lang, onSelectCoin, onSelectNFT }: DashboardProps) {
   const [sortColumn, setSortColumn] = useState<SortColumn>('coin');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
-  const [activeTab, setActiveTab] = useState<'all' | 'etf' | 'leveraged' | 'stablecoin' | 'leaderboard' | 'luck'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'etf' | 'leveraged' | 'stablecoin' | 'leaderboard' | 'luck' | 'nft'>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -187,7 +189,7 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
           <div className="flex items-center gap-4">
             <h2 className="text-2xl font-semibold text-slate-900 dark:text-white flex items-center gap-2">
               <Activity className="text-indigo-500" />
-              {t.coins}
+              {activeTab === 'nft' ? 'NFT 市場' : (activeTab === 'luck' ? 'LUCK 雙龍鬥' : (activeTab === 'leaderboard' ? '排行榜' : t.coins))}
             </h2>
             <div className="flex bg-slate-100 dark:bg-slate-800 rounded-lg p-1">
               <button
@@ -252,14 +254,25 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
                 <Dices size={14} />
                 {lang === 'zh' ? 'Luck' : 'Luck'}
               </button>
+              <button
+                onClick={() => { setActiveTab('nft'); setSelectedCategory('All'); }}
+                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-1 ${
+                  activeTab === 'nft'
+                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+                }`}
+              >
+                <Layers size={14} />
+                NFT
+              </button>
             </div>
           </div>
           <div className="text-sm text-slate-500 dark:text-slate-400">
-            {activeTab === 'leaderboard' || activeTab === 'luck' ? '' : `${coinsWithStats.length} ${activeTab === 'etf' ? 'ETFs' : (activeTab === 'leveraged' ? 'Leveraged Tokens' : (activeTab === 'stablecoin' ? 'Stablecoins' : 'Coins'))} Listed`}
+            {activeTab === 'leaderboard' || activeTab === 'luck' || activeTab === 'nft' ? '' : `${coinsWithStats.length} ${activeTab === 'etf' ? 'ETFs' : (activeTab === 'leveraged' ? 'Leveraged Tokens' : (activeTab === 'stablecoin' ? 'Stablecoins' : 'Coins'))} Listed`}
           </div>
         </div>
 
-        {activeTab !== 'leaderboard' && activeTab !== 'luck' && availableCategories.length > 1 && (
+        {activeTab !== 'leaderboard' && activeTab !== 'luck' && activeTab !== 'nft' && availableCategories.length > 1 && (
           <div className="relative group w-full overflow-hidden">
             <div 
               ref={scrollContainerRef}
@@ -302,6 +315,8 @@ export function Dashboard({ state, lang, onSelectCoin }: DashboardProps) {
 
         {activeTab === 'luck' ? (
           <LuckTab state={state} lang={lang} />
+        ) : activeTab === 'nft' ? (
+          <NFTTab nfts={state.nfts} onSelectNFT={onSelectNFT} />
         ) : activeTab === 'leaderboard' ? (
           <LeaderboardView state={state} lang={lang} onSelectCoin={onSelectCoin} />
         ) : (

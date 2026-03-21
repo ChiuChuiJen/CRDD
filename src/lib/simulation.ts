@@ -1,4 +1,4 @@
-import { Coin, MarketEvent, ImpactLevel } from '../data/parser';
+import { Coin, MarketEvent, ImpactLevel, NFT, DEFAULT_NFTS, parseNFTEvents } from '../data/parser';
 
 export interface LuckBet {
   id: string;
@@ -33,6 +33,7 @@ export interface SimulationState {
   news: { time: number, text: string }[];
   top50Ids: string[];
   luckEvents: LuckEvent[];
+  nfts: NFT[];
   userBalance: number;
 }
 
@@ -185,6 +186,56 @@ export function initializeSimulation(coins: Coin[]): SimulationState {
 
   initializedCoins.push(defaultETF);
 
+  const initializedNFTs: NFT[] = DEFAULT_NFTS.map(n => {
+    const price = n.initialPrice || 100;
+    const marketCap = price * (n.totalSupply || 1);
+    
+    // Generate random initial chip distribution
+    const foreign = Math.random() * 40 + 10;
+    const institution = Math.random() * 30 + 10;
+    const largeHolder = Math.random() * 20 + 5;
+    const retail = 100 - foreign - institution - largeHolder;
+
+    // Generate random initial circulation distribution
+    const locked = Math.random() * 30 + 10;
+    const staked = Math.random() * 40 + 10;
+    const circulating = 100 - locked - staked;
+
+    return {
+      id: n.symbol!,
+      name: n.name!,
+      symbol: n.symbol!,
+      type: n.type!,
+      rarity: n.rarity as any,
+      totalSupply: n.totalSupply!,
+      initialPrice: price,
+      price: price,
+      description: n.description!,
+      author: n.author!,
+      utility: n.utility!,
+      traits: n.traits || [
+        { type: '背景', value: '普通', rarity: 80 },
+        { type: '等級', value: '標準', rarity: 90 },
+        { type: '屬性', value: '無', rarity: 100 }
+      ],
+      isFractionalized: n.isFractionalized!,
+      fractionRatio: n.fractionRatio!,
+      marketCap: marketCap,
+      volume24h: Math.random() * marketCap * 0.01,
+      history: [{ time: now, price }],
+      dailyHistory: [{ date: now, open: price, high: price, low: price, close: price }],
+      chipDistribution: { foreign, institution, largeHolder, retail },
+      circulation: { circulating, staked, locked },
+      sentiment: (Math.random() - 0.5) * 10,
+      volatility: Math.random() * 0.1 + 0.05, // NFTs are more volatile
+      drift: (Math.random() - 0.5) * 0.002,
+      variance: Math.pow(Math.random() * 0.1 + 0.05, 2),
+      kappa: Math.random() * 2 + 1,
+      theta: Math.pow(Math.random() * 0.1 + 0.05, 2),
+      xi: Math.random() * 0.3 + 0.1
+    };
+  });
+
   return {
     currentTime: now,
     coins: initializedCoins,
@@ -195,6 +246,7 @@ export function initializeSimulation(coins: Coin[]): SimulationState {
     news: [],
     top50Ids,
     luckEvents: [],
+    nfts: initializedNFTs,
     userBalance: 100000 // Give user some initial balance
   };
 }
@@ -248,18 +300,24 @@ export function tickSimulation(
 
   // Generate new events if it's a new day
   if (isNewDay) {
-    const numEvents = Math.floor(Math.random() * 5); // 0 to 4 events
+    const nftEvents = parseNFTEvents();
+    const numEvents = Math.floor(Math.random() * 6); // 0 to 5 events
     for (let i = 0; i < numEvents; i++) {
       const randType = Math.random();
       let eventList: MarketEvent[];
       let isMarketWide = false;
       let isCategory = false;
+      let isNFTEvent = false;
 
-      if (randType > 0.8) {
+      if (randType > 0.85) {
         eventList = eventsB;
         isMarketWide = true;
-      } else if (randType > 0.5) {
+      } else if (randType > 0.6) {
         eventList = eventsC;
+        isCategory = true;
+      } else if (randType > 0.4) {
+        eventList = nftEvents;
+        isNFTEvent = true;
         isCategory = true;
       } else {
         eventList = eventsA;
@@ -685,6 +743,85 @@ export function tickSimulation(
   
   newLuckEvents = newLuckEvents.filter(e => e.status !== 'delisted');
 
+  // Process NFTs
+  const newNFTs: NFT[] = state.nfts.map(nft => {
+    let mu = nft.drift;
+    let sigma = nft.volatility;
+    let newSentiment = nft.sentiment;
+    let newVariance = nft.variance;
+
+    // Apply active events
+    for (const ev of newEvents) {
+      if (!ev.targetCoinId && !ev.targetCategory) {
+        // Market-wide
+        mu += ev.impact / dt / 144;
+        newSentiment += ev.impact * 10;
+      } else if (ev.targetCategory && ev.targetCategory === nft.type) {
+        // Category-wide
+        mu += ev.impact / dt / 144;
+        newSentiment += ev.impact * 10;
+      }
+    }
+
+    // Heston Model for NFT
+    const kappa = nft.kappa;
+    const theta = nft.theta;
+    const xi = nft.xi;
+    const dW_v = randn_bm() * Math.sqrt(dt);
+    newVariance = newVariance + kappa * (theta - newVariance) * dt + xi * Math.sqrt(Math.max(0, newVariance)) * dW_v;
+    newVariance = Math.max(0.000001, newVariance);
+    const currentVolatility = Math.sqrt(newVariance);
+
+    const dW_s = randn_bm() * Math.sqrt(dt);
+    const dS = mu * nft.price * dt + currentVolatility * nft.price * dW_s;
+    
+    // Add jumps for NFTs (more frequent)
+    let jumpMultiplier = 1;
+    if (Math.random() < 10 * dt) {
+      const jumpSize = (Math.random() - 0.5) * 0.3;
+      jumpMultiplier = Math.exp(jumpSize);
+    }
+
+    let newPrice = (nft.price + dS) * jumpMultiplier;
+    if (newPrice < 0.01) newPrice = 0.01;
+
+    const priceChangeRatio = (newPrice - nft.price) / nft.price;
+    newSentiment += priceChangeRatio * 50;
+    newSentiment = Math.max(-10, Math.min(10, newSentiment));
+
+    // Update history
+    const history = [...nft.history, { time: newTime, price: newPrice }];
+    if (history.length > 100) history.shift();
+
+    const dailyHistory = [...nft.dailyHistory];
+    if (isNewDay) {
+      const prevClose = dailyHistory.length > 0 ? dailyHistory[dailyHistory.length - 1].close : nft.initialPrice;
+      dailyHistory.push({
+        date: newTime,
+        open: prevClose,
+        high: Math.max(prevClose, newPrice),
+        low: Math.min(prevClose, newPrice),
+        close: newPrice
+      });
+    } else if (dailyHistory.length > 0) {
+      const last = { ...dailyHistory[dailyHistory.length - 1] };
+      last.high = Math.max(last.high, newPrice);
+      last.low = Math.min(last.low, newPrice);
+      last.close = newPrice;
+      dailyHistory[dailyHistory.length - 1] = last;
+    }
+
+    return {
+      ...nft,
+      price: newPrice,
+      marketCap: newPrice * nft.totalSupply,
+      history,
+      dailyHistory,
+      sentiment: newSentiment,
+      variance: newVariance
+    };
+  });
+
   return {
     currentTime: newTime,
     coins: newCoins,
@@ -695,6 +832,7 @@ export function tickSimulation(
     news: newNews,
     top50Ids: newTop50Ids,
     luckEvents: newLuckEvents,
+    nfts: newNFTs,
     userBalance: newUserBalance
   };
 }

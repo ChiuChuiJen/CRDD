@@ -66,7 +66,7 @@ export function Header({
                   {t.title}
                 </h1>
                 <span className="px-2 py-0.5 text-[10px] font-mono font-medium rounded-full bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                  v1.2.0
+                  v1.3.0
                 </span>
               </div>
               <div 

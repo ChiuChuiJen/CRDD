@@ -17,11 +17,16 @@ export function CoinIssuerModal({ state, onClose, onIssue, onImport, lang }: Coi
   const [totalSupply, setTotalSupply] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('Others');
-  const [issueType, setIssueType] = useState<'coin' | 'etf' | 'leveraged' | 'luck'>('coin');
+  const [issueType, setIssueType] = useState<'coin' | 'etf' | 'leveraged' | 'luck' | 'nft'>('coin');
+  const [nftType, setNftType] = useState('Art');
+  const [nftRarity, setNftRarity] = useState('Common');
+  const [nftUtility, setNftUtility] = useState('');
+  const [isFractionalized, setIsFractionalized] = useState(false);
   const [selectedComponents, setSelectedComponents] = useState<string[]>([]);
   const [underlyingId, setUnderlyingId] = useState('');
   const [leverageFactor, setLeverageFactor] = useState('2');
   const [targetDigit, setTargetDigit] = useState('units');
+  const [searchTerm, setSearchTerm] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const CATEGORIES = [
@@ -29,6 +34,9 @@ export function CoinIssuerModal({ state, onClose, onIssue, onImport, lang }: Coi
     'Meme', 'Privacy & Security', 'Storage & Data', 'Energy & Environment', 
     'Metaverse', 'Infrastructure', 'Others'
   ];
+
+  const NFT_CATEGORIES = ['Art', 'Collectible', 'Game', 'Music', 'Metaverse', 'Utility', 'Domain'];
+  const NFT_RARITIES = ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic'];
 
   const LEVERAGE_OPTIONS = [
     { label: 'Long 2x', value: '2' },
@@ -54,6 +62,7 @@ export function CoinIssuerModal({ state, onClose, onIssue, onImport, lang }: Coi
       typeETF: 'ETF',
       typeLeveraged: '槓桿代幣',
       typeLuck: 'Luck (雙龍鬥)',
+      typeNFT: 'NFT',
       underlying: '標的資產',
       leverage: '槓桿倍數',
       components: '選擇成分幣',
@@ -64,6 +73,7 @@ export function CoinIssuerModal({ state, onClose, onIssue, onImport, lang }: Coi
       export: '匯出',
       import: '匯入',
       importError: '匯入失敗，請檢查檔案格式',
+      search: '搜尋貨幣...',
     },
     en: {
       title: 'Issue New Asset',
@@ -78,6 +88,7 @@ export function CoinIssuerModal({ state, onClose, onIssue, onImport, lang }: Coi
       typeETF: 'ETF',
       typeLeveraged: 'Leveraged Token',
       typeLuck: 'Luck (Double Dragon)',
+      typeNFT: 'NFT',
       underlying: 'Underlying Asset',
       leverage: 'Leverage Factor',
       components: 'Select Components',
@@ -88,6 +99,7 @@ export function CoinIssuerModal({ state, onClose, onIssue, onImport, lang }: Coi
       export: 'Export',
       import: 'Import',
       importError: 'Import failed, please check file format',
+      search: 'Search coins...',
     }
   }[lang];
 
@@ -106,6 +118,22 @@ export function CoinIssuerModal({ state, onClose, onIssue, onImport, lang }: Coi
         underlyingId,
         targetDigit,
         description
+      });
+      return;
+    }
+
+    if (issueType === 'nft') {
+      onIssue({
+        isNFT: true,
+        name,
+        symbol: symbol.toUpperCase(),
+        initialPrice: parseFloat(initialPrice),
+        totalSupply: parseFloat(totalSupply),
+        description,
+        nftType,
+        nftRarity,
+        nftUtility,
+        isFractionalized
       });
       return;
     }
@@ -142,6 +170,9 @@ export function CoinIssuerModal({ state, onClose, onIssue, onImport, lang }: Coi
       description: c.description,
       category: c.category,
       isETF: c.isETF,
+      isLeveraged: c.isLeveraged,
+      leverageFactor: c.leverageFactor,
+      underlyingId: c.underlyingId,
       components: c.components
     }));
     
@@ -183,7 +214,11 @@ export function CoinIssuerModal({ state, onClose, onIssue, onImport, lang }: Coi
     }
   };
 
-  const availableCoins = state.coins.filter(c => !c.isETF);
+  const availableCoins = state.coins.filter(c => !c.isETF && !c.isLeveraged);
+  const filteredCoins = availableCoins.filter(c => 
+    c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    c.symbol.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
@@ -207,11 +242,11 @@ export function CoinIssuerModal({ state, onClose, onIssue, onImport, lang }: Coi
           <form id="issue-form" onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{t.type}</label>
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-5 gap-1">
                 <button
                   type="button"
                   onClick={() => setIssueType('coin')}
-                  className={`px-3 py-2 text-xs font-medium rounded-lg border transition-colors ${
+                  className={`px-2 py-2 text-[10px] font-medium rounded-lg border transition-colors ${
                     issueType === 'coin'
                       ? 'bg-indigo-500 text-white border-indigo-500'
                       : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
@@ -222,7 +257,7 @@ export function CoinIssuerModal({ state, onClose, onIssue, onImport, lang }: Coi
                 <button
                   type="button"
                   onClick={() => setIssueType('etf')}
-                  className={`px-3 py-2 text-xs font-medium rounded-lg border transition-colors ${
+                  className={`px-2 py-2 text-[10px] font-medium rounded-lg border transition-colors ${
                     issueType === 'etf'
                       ? 'bg-indigo-500 text-white border-indigo-500'
                       : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
@@ -233,7 +268,7 @@ export function CoinIssuerModal({ state, onClose, onIssue, onImport, lang }: Coi
                 <button
                   type="button"
                   onClick={() => setIssueType('leveraged')}
-                  className={`px-3 py-2 text-xs font-medium rounded-lg border transition-colors ${
+                  className={`px-2 py-2 text-[10px] font-medium rounded-lg border transition-colors ${
                     issueType === 'leveraged'
                       ? 'bg-indigo-500 text-white border-indigo-500'
                       : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
@@ -244,13 +279,24 @@ export function CoinIssuerModal({ state, onClose, onIssue, onImport, lang }: Coi
                 <button
                   type="button"
                   onClick={() => setIssueType('luck')}
-                  className={`px-3 py-2 text-xs font-medium rounded-lg border transition-colors ${
+                  className={`px-2 py-2 text-[10px] font-medium rounded-lg border transition-colors ${
                     issueType === 'luck'
                       ? 'bg-indigo-500 text-white border-indigo-500'
                       : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
                   }`}
                 >
                   {t.typeLuck}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIssueType('nft')}
+                  className={`px-2 py-2 text-[10px] font-medium rounded-lg border transition-colors ${
+                    issueType === 'nft'
+                      ? 'bg-indigo-500 text-white border-indigo-500'
+                      : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  {t.typeNFT}
                 </button>
               </div>
             </div>
@@ -308,36 +354,79 @@ export function CoinIssuerModal({ state, onClose, onIssue, onImport, lang }: Coi
               </>
             )}
 
-            {issueType === 'coin' && (
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t.category}</label>
-                <select
-                  value={category}
-                  onChange={e => setCategory(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
-                >
-                  {CATEGORIES.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
-              </div>
+            {issueType === 'nft' && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">NFT Type</label>
+                  <select
+                    value={nftType}
+                    onChange={e => setNftType(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                  >
+                    {NFT_CATEGORIES.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Rarity</label>
+                  <select
+                    value={nftRarity}
+                    onChange={e => setNftRarity(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                  >
+                    {NFT_RARITIES.map(rarity => (
+                      <option key={rarity} value={rarity}>{rarity}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Utility</label>
+                  <input 
+                    type="text"
+                    value={nftUtility}
+                    onChange={e => setNftUtility(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                    placeholder="e.g. Access to VIP lounge"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <input 
+                    type="checkbox"
+                    id="fractionalized"
+                    checked={isFractionalized}
+                    onChange={e => setIsFractionalized(e.target.checked)}
+                    className="w-4 h-4 text-indigo-600 bg-slate-100 border-slate-300 rounded focus:ring-indigo-500"
+                  />
+                  <label htmlFor="fractionalized" className="text-sm font-medium text-slate-700 dark:text-slate-300">Fractionalized (碎片化)</label>
+                </div>
+              </>
             )}
 
             {issueType === 'leveraged' && (
               <>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t.underlying}</label>
-                  <select
-                    value={underlyingId}
-                    onChange={e => setUnderlyingId(e.target.value)}
-                    required
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
-                  >
-                    <option value="">Select Underlying</option>
-                    {availableCoins.map(coin => (
-                      <option key={coin.id} value={coin.id}>{coin.symbol} - {coin.name}</option>
-                    ))}
-                  </select>
+                  <div className="space-y-2">
+                    <input 
+                      type="text"
+                      placeholder={t.search}
+                      value={searchTerm}
+                      onChange={e => setSearchTerm(e.target.value)}
+                      className="w-full px-3 py-1.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                    />
+                    <select
+                      value={underlyingId}
+                      onChange={e => setUnderlyingId(e.target.value)}
+                      required
+                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                    >
+                      <option value="">Select Underlying</option>
+                      {filteredCoins.map(coin => (
+                        <option key={coin.id} value={coin.id}>{coin.symbol} - {coin.name}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t.leverage}</label>
@@ -358,17 +447,26 @@ export function CoinIssuerModal({ state, onClose, onIssue, onImport, lang }: Coi
               <>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t.underlying}</label>
-                  <select
-                    value={underlyingId}
-                    onChange={e => setUnderlyingId(e.target.value)}
-                    required
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
-                  >
-                    <option value="index">Weighted Index</option>
-                    {availableCoins.map(coin => (
-                      <option key={coin.id} value={coin.id}>{coin.symbol} - {coin.name}</option>
-                    ))}
-                  </select>
+                  <div className="space-y-2">
+                    <input 
+                      type="text"
+                      placeholder={t.search}
+                      value={searchTerm}
+                      onChange={e => setSearchTerm(e.target.value)}
+                      className="w-full px-3 py-1.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                    />
+                    <select
+                      value={underlyingId}
+                      onChange={e => setUnderlyingId(e.target.value)}
+                      required
+                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                    >
+                      <option value="index">Weighted Index</option>
+                      {filteredCoins.map(coin => (
+                        <option key={coin.id} value={coin.id}>{coin.symbol} - {coin.name}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t.targetDigit}</label>
@@ -392,8 +490,17 @@ export function CoinIssuerModal({ state, onClose, onIssue, onImport, lang }: Coi
             {issueType === 'etf' && (
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{t.components}</label>
+                <div className="mb-2">
+                  <input 
+                    type="text"
+                    placeholder={t.search}
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                    className="w-full px-3 py-1.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                  />
+                </div>
                 <div className="max-h-60 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 p-2 space-y-1">
-                  {availableCoins.map(coin => (
+                  {filteredCoins.map(coin => (
                     <div 
                       key={coin.id}
                       onClick={() => toggleComponent(coin.id)}

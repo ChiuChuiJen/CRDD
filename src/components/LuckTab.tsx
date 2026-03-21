@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { SimulationState, LuckEvent, calculateLuckOdds } from '../lib/simulation';
 import { formatCurrency } from '../lib/format';
-import { Coins, Clock, AlertCircle } from 'lucide-react';
+import { Coins, Clock, AlertCircle, X, Info, TrendingUp, DollarSign } from 'lucide-react';
 
 interface LuckTabProps {
   state: SimulationState;
@@ -40,6 +40,8 @@ const translations = {
     winningOption: '獲勝選項',
     myBets: '我的下注',
     totalWinnings: '總獎金',
+    details: '詳細資訊',
+    close: '關閉',
   },
   en: {
     doubleDragon: 'Double Dragon Duel',
@@ -72,21 +74,25 @@ const translations = {
     winningOption: 'Winning Option',
     myBets: 'My Bets',
     totalWinnings: 'Total Winnings',
+    details: 'Details',
+    close: 'Close',
   }
 };
 
 export function LuckTab({ state, lang }: LuckTabProps) {
   const t = translations[lang];
   const [activeSubTab, setActiveSubTab] = useState<'active' | 'settled'>('active');
+  const [selectedEvent, setSelectedEvent] = useState<LuckEvent | null>(null);
 
   const activeEvents = state.luckEvents.filter(e => e.status === 'active');
-  const settledEvents = state.luckEvents.filter(e => e.status === 'settled');
+  const settledEvents = state.luckEvents.filter(e => 
+    e.status === 'settled' && 
+    (state.currentTime - (e.settlementDate || 0)) < 60 * 24 * 60 * 60 * 1000
+  );
 
-  const renderEventCard = (event: LuckEvent) => {
-    const isSettled = event.status === 'settled';
-    const targetName = event.targetType === 'index' ? '加權指數 (Weighted Index)' : event.targetId;
+  const getEventData = (event: LuckEvent) => {
+    const targetName = event.targetType === 'index' ? (lang === 'zh' ? '加權指數' : 'Weighted Index') : event.targetId;
     
-    // Calculate current odds based on current target value
     let currentTargetValue = 0;
     if (event.targetType === 'index') {
       currentTargetValue = state.indexValue;
@@ -96,179 +102,225 @@ export function LuckTab({ state, lang }: LuckTabProps) {
     }
 
     const odds = calculateLuckOdds(currentTargetValue, event.targetDigit);
-    const smallOdds = odds.small;
-    const largeOdds = odds.large;
-    const zeroFiveOdds = odds.zero_five;
-
-    // Generate mock betting data based on event ID and time
+    
     let hash = 0;
     for (let i = 0; i < event.id.length; i++) {
       hash = ((hash << 5) - hash) + event.id.charCodeAt(i);
       hash |= 0;
     }
     const seed = Math.abs(hash);
-    
-    // Base volume between 1,000,000 and 10,000,000 CRDT
     const baseVolume = 1000000 + (seed % 9000000);
-    
-    // Progress from 0 to 1
     const progress = Math.min(1, Math.max(0, (state.currentTime - event.listDate) / (event.stopTradingDate - event.listDate)));
-    
-    // Total volume grows with progress
     const totalVolume = Math.floor(baseVolume * Math.pow(progress, 0.7));
     
-    // Distribution percentages (should sum to 100)
-    // We can use the seed to determine the bias, but also inversely correlate with odds
-    // Lower odds = more people bet on it
-    const invSmall = 1 / smallOdds;
-    const invLarge = 1 / largeOdds;
-    const invZeroFive = 1 / zeroFiveOdds;
+    const invSmall = 1 / odds.small;
+    const invLarge = 1 / odds.large;
+    const invZeroFive = 1 / odds.zero_five;
     const sumInv = invSmall + invLarge + invZeroFive;
-    
-    // Add some noise based on seed
-    const noise1 = (seed % 10) / 100; // 0 to 0.09
+    const noise1 = (seed % 10) / 100;
     const noise2 = ((seed >> 2) % 10) / 100;
     const noise3 = ((seed >> 4) % 10) / 100;
-    
     const wSmall = (invSmall / sumInv) + noise1;
     const wLarge = (invLarge / sumInv) + noise2;
     const wZeroFive = (invZeroFive / sumInv) + noise3;
     const sumW = wSmall + wLarge + wZeroFive;
     
-    const smallPct = (wSmall / sumW) * 100;
-    const largePct = (wLarge / sumW) * 100;
-    const zeroFivePct = (wZeroFive / sumW) * 100;
+    return {
+      targetName,
+      currentTargetValue,
+      odds,
+      totalVolume,
+      smallPct: (wSmall / sumW) * 100,
+      largePct: (wLarge / sumW) * 100,
+      zeroFivePct: (wZeroFive / sumW) * 100
+    };
+  };
+
+  const renderEventSmallCard = (event: LuckEvent) => {
+    const isSettled = event.status === 'settled';
+    const { targetName, currentTargetValue, odds } = getEventData(event);
 
     return (
-      <div key={event.id} className="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border border-slate-200 dark:border-slate-700 mb-4">
-        <div className="flex justify-between items-start mb-4">
-          <div>
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white">{event.id}</h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400">{targetName} - {event.targetDigit}</p>
+      <div 
+        key={event.id} 
+        onClick={() => setSelectedEvent(event)}
+        className="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-700 hover:border-indigo-500 dark:hover:border-indigo-400 transition-all cursor-pointer group"
+      >
+        <div className="flex justify-between items-start mb-2">
+          <div className="flex-1 min-w-0">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white truncate group-hover:text-indigo-500 transition-colors">{event.id}</h3>
+            <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">{targetName}</p>
           </div>
-          <div className={`px-3 py-1 rounded-full text-xs font-medium ${
+          <div className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
             isSettled ? 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300' : 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400'
           }`}>
             {isSettled ? t.settledEvents : t.activeEvents}
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 text-sm">
-          <div>
-            <p className="text-slate-500 dark:text-slate-400">{t.listDate}</p>
-            <p className="font-medium text-slate-900 dark:text-white">{new Date(event.listDate).toLocaleString()}</p>
+        <div className="grid grid-cols-3 gap-2 mt-3">
+          <div className="text-center">
+            <div className="text-[10px] text-slate-500 dark:text-slate-400">{t.small}</div>
+            <div className="text-xs font-bold text-indigo-600 dark:text-indigo-400">{odds.small.toFixed(2)}x</div>
           </div>
-          <div>
-            <p className="text-slate-500 dark:text-slate-400">{t.stopDate}</p>
-            <p className="font-medium text-slate-900 dark:text-white">{new Date(event.stopTradingDate).toLocaleString()}</p>
+          <div className="text-center">
+            <div className="text-[10px] text-slate-500 dark:text-slate-400">{t.zeroFive}</div>
+            <div className="text-xs font-bold text-indigo-600 dark:text-indigo-400">{odds.zero_five.toFixed(2)}x</div>
           </div>
-          <div>
-            <p className="text-slate-500 dark:text-slate-400">{t.settleDate}</p>
-            <p className="font-medium text-slate-900 dark:text-white">{new Date(event.settlementDate).toLocaleString()}</p>
+          <div className="text-center">
+            <div className="text-[10px] text-slate-500 dark:text-slate-400">{t.large}</div>
+            <div className="text-xs font-bold text-indigo-600 dark:text-indigo-400">{odds.large.toFixed(2)}x</div>
           </div>
-          {!isSettled && (
-            <div>
-              <p className="text-slate-500 dark:text-slate-400">{t.currentValue}</p>
-              <p className="font-medium text-indigo-600 dark:text-indigo-400">{formatCurrency(currentTargetValue)}</p>
-            </div>
-          )}
-          {isSettled && (
-            <div>
-              <p className="text-slate-500 dark:text-slate-400">{t.settlementValue}</p>
-              <p className="font-medium text-emerald-600 dark:text-emerald-400">{formatCurrency(event.settlementValue || 0)}</p>
-            </div>
-          )}
         </div>
 
-        {isSettled && event.winningOption && (
-          <div className="mb-6 p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg border border-emerald-100 dark:border-emerald-800/30">
-            <p className="text-sm text-emerald-800 dark:text-emerald-300 font-medium">
-              {t.winningOption}: {event.winningOption === 'small' ? t.small : event.winningOption === 'large' ? t.large : t.zeroFive}
-            </p>
-          </div>
-        )}
+        <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-700 flex justify-between items-center text-[10px]">
+          <span className="text-slate-500 dark:text-slate-400">{isSettled ? t.settlementValue : t.currentValue}</span>
+          <span className={`font-mono font-bold ${isSettled ? 'text-emerald-500' : 'text-slate-700 dark:text-slate-300'}`}>
+            {formatCurrency(isSettled ? event.settlementValue || 0 : currentTargetValue)}
+          </span>
+        </div>
+      </div>
+    );
+  };
 
-        {!isSettled && (
-          <div className="border-t border-slate-200 dark:border-slate-700 pt-6">
-            <div className="flex justify-between items-center mb-4">
-              <h4 className="font-medium text-slate-900 dark:text-white">
-                {state.currentTime < event.stopTradingDate ? t.currentOdds : t.finalOdds}
-              </h4>
-              {state.currentTime >= event.stopTradingDate && (
-                <span className="px-2 py-0.5 bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 text-[10px] font-bold rounded uppercase tracking-wider">
-                  {t.locked}
-                </span>
+  const renderEventModal = () => {
+    if (!selectedEvent) return null;
+    const event = selectedEvent;
+    const isSettled = event.status === 'settled';
+    const { targetName, currentTargetValue, odds, totalVolume, smallPct, largePct, zeroFivePct } = getEventData(event);
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+        <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setSelectedEvent(null)}></div>
+        <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+          <div className="flex items-center justify-between p-6 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-indigo-500/10 rounded-lg">
+                <Info className="text-indigo-500" size={24} />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-slate-900 dark:text-white">{event.id}</h2>
+                <p className="text-sm text-slate-500 dark:text-slate-400">{targetName} - {event.targetDigit}</p>
+              </div>
+            </div>
+            <button 
+              onClick={() => setSelectedEvent(null)}
+              className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            >
+              <X size={20} />
+            </button>
+          </div>
+
+          <div className="p-6 overflow-y-auto space-y-6">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-700">
+                <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">{t.listDate}</p>
+                <p className="font-medium text-slate-900 dark:text-white">{new Date(event.listDate).toLocaleString()}</p>
+              </div>
+              <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-700">
+                <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">{t.stopDate}</p>
+                <p className="font-medium text-slate-900 dark:text-white">{new Date(event.stopTradingDate).toLocaleString()}</p>
+              </div>
+              <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-700">
+                <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">{t.settleDate}</p>
+                <p className="font-medium text-slate-900 dark:text-white">{new Date(event.settlementDate).toLocaleString()}</p>
+              </div>
+              <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-700">
+                <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">{isSettled ? t.settlementValue : t.currentValue}</p>
+                <p className={`font-bold text-lg ${isSettled ? 'text-emerald-500' : 'text-indigo-600 dark:text-indigo-400'}`}>
+                  {formatCurrency(isSettled ? event.settlementValue || 0 : currentTargetValue)}
+                </p>
+              </div>
+            </div>
+
+            {isSettled && event.winningOption && (
+              <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-100 dark:border-emerald-800/30 flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-emerald-800/60 dark:text-emerald-300/60 font-medium uppercase tracking-wider">{t.winningOption}</p>
+                  <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">
+                    {event.winningOption === 'small' ? t.small : event.winningOption === 'large' ? t.large : t.zeroFive}
+                  </p>
+                </div>
+                <TrendingUp className="text-emerald-500" size={32} />
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <h4 className="font-bold text-slate-900 dark:text-white">
+                  {isSettled ? t.finalOdds : (state.currentTime < event.stopTradingDate ? t.currentOdds : t.finalOdds)}
+                </h4>
+                {state.currentTime >= event.stopTradingDate && !isSettled && (
+                  <span className="px-2 py-0.5 bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 text-[10px] font-bold rounded uppercase tracking-wider">
+                    {t.locked}
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-700 text-center bg-slate-50 dark:bg-slate-800/50">
+                  <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">{t.small}</div>
+                  <div className="text-xl font-bold text-indigo-600 dark:text-indigo-400">{odds.small.toFixed(2)}x</div>
+                </div>
+                <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-700 text-center bg-slate-50 dark:bg-slate-800/50">
+                  <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">{t.zeroFive}</div>
+                  <div className="text-xl font-bold text-indigo-600 dark:text-indigo-400">{odds.zero_five.toFixed(2)}x</div>
+                </div>
+                <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-700 text-center bg-slate-50 dark:bg-slate-800/50">
+                  <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">{t.large}</div>
+                  <div className="text-xl font-bold text-indigo-600 dark:text-indigo-400">{odds.large.toFixed(2)}x</div>
+                </div>
+              </div>
+              {!isSettled && state.currentTime < event.stopTradingDate && (
+                <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                  <AlertCircle size={14} />
+                  {t.oddsDisclaimer}
+                </p>
               )}
             </div>
-            
-            <div className="grid grid-cols-3 gap-3 mb-2">
-              <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-700 text-center bg-slate-50 dark:bg-slate-800/50">
-                <div className="font-medium text-slate-700 dark:text-slate-300">{t.small}</div>
-                <div className="text-lg font-bold text-indigo-600 dark:text-indigo-400 mt-1">{smallOdds.toFixed(2)}x</div>
-              </div>
-              <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-700 text-center bg-slate-50 dark:bg-slate-800/50">
-                <div className="font-medium text-slate-700 dark:text-slate-300">{t.zeroFive}</div>
-                <div className="text-lg font-bold text-indigo-600 dark:text-indigo-400 mt-1">{zeroFiveOdds.toFixed(2)}x</div>
-              </div>
-              <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-700 text-center bg-slate-50 dark:bg-slate-800/50">
-                <div className="font-medium text-slate-700 dark:text-slate-300">{t.large}</div>
-                <div className="text-lg font-bold text-indigo-600 dark:text-indigo-400 mt-1">{largeOdds.toFixed(2)}x</div>
-              </div>
-            </div>
-            
-            {state.currentTime < event.stopTradingDate && (
-              <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-3 mb-6">
-                <AlertCircle size={14} />
-                {t.oddsDisclaimer}
-              </p>
-            )}
-          </div>
-        )}
 
-        <div className="border-t border-slate-200 dark:border-slate-700 pt-6">
-          <div className="flex justify-between items-end mb-4">
-            <h4 className="font-medium text-slate-900 dark:text-white">{t.bettingStatus}</h4>
-            <div className="text-sm">
-              <span className="text-slate-500 dark:text-slate-400">{t.totalBetAmount}: </span>
-              <span className="font-bold text-indigo-600 dark:text-indigo-400">{formatCurrency(totalVolume)} CRDT</span>
+            <div className="pt-6 border-t border-slate-100 dark:border-slate-800">
+              <div className="flex justify-between items-end mb-4">
+                <div className="flex items-center gap-2">
+                  <DollarSign className="text-indigo-500" size={18} />
+                  <h4 className="font-bold text-slate-900 dark:text-white">{t.bettingStatus}</h4>
+                </div>
+                <div className="text-sm">
+                  <span className="text-slate-500 dark:text-slate-400">{t.totalBetAmount}: </span>
+                  <span className="font-bold text-indigo-600 dark:text-indigo-400">{formatCurrency(totalVolume)} CRDT</span>
+                </div>
+              </div>
+              
+              <div className="space-y-3">
+                <div className="h-4 w-full flex rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800">
+                  <div className="bg-blue-500 transition-all duration-500" style={{ width: `${smallPct}%` }}></div>
+                  <div className="bg-amber-500 transition-all duration-500" style={{ width: `${zeroFivePct}%` }}></div>
+                  <div className="bg-rose-500 transition-all duration-500" style={{ width: `${largePct}%` }}></div>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="flex flex-col p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700">
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-bold">{t.small}</span>
+                    <span className="text-sm font-bold text-slate-900 dark:text-white">{smallPct.toFixed(1)}%</span>
+                  </div>
+                  <div className="flex flex-col p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700">
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-bold">{t.zeroFive}</span>
+                    <span className="text-sm font-bold text-slate-900 dark:text-white">{zeroFivePct.toFixed(1)}%</span>
+                  </div>
+                  <div className="flex flex-col p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700">
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-bold">{t.large}</span>
+                    <span className="text-sm font-bold text-slate-900 dark:text-white">{largePct.toFixed(1)}%</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-          
-          <div className="space-y-2">
-            <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mb-1">
-              <span>{t.distribution}</span>
-            </div>
-            <div className="h-4 w-full flex rounded-full overflow-hidden">
-              <div 
-                className="bg-blue-500 transition-all duration-500" 
-                style={{ width: `${smallPct}%` }}
-                title={`${t.small}: ${smallPct.toFixed(1)}%`}
-              ></div>
-              <div 
-                className="bg-amber-500 transition-all duration-500" 
-                style={{ width: `${zeroFivePct}%` }}
-                title={`${t.zeroFive}: ${zeroFivePct.toFixed(1)}%`}
-              ></div>
-              <div 
-                className="bg-rose-500 transition-all duration-500" 
-                style={{ width: `${largePct}%` }}
-                title={`${t.large}: ${largePct.toFixed(1)}%`}
-              ></div>
-            </div>
-            <div className="flex justify-between text-xs mt-2">
-              <div className="flex items-center gap-1">
-                <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                <span className="text-slate-600 dark:text-slate-400">{t.small} ({smallPct.toFixed(1)}%)</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="w-2 h-2 rounded-full bg-amber-500"></div>
-                <span className="text-slate-600 dark:text-slate-400">{t.zeroFive} ({zeroFivePct.toFixed(1)}%)</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="w-2 h-2 rounded-full bg-rose-500"></div>
-                <span className="text-slate-600 dark:text-slate-400">{t.large} ({largePct.toFixed(1)}%)</span>
-              </div>
-            </div>
+
+          <div className="p-6 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30">
+            <button 
+              onClick={() => setSelectedEvent(null)}
+              className="w-full py-3 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold rounded-xl transition-colors"
+            >
+              {t.close}
+            </button>
           </div>
         </div>
       </div>
@@ -307,27 +359,29 @@ export function LuckTab({ state, lang }: LuckTabProps) {
         </button>
       </div>
 
-      <div className="space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {activeSubTab === 'active' ? (
           activeEvents.length > 0 ? (
-            activeEvents.map(renderEventCard)
+            activeEvents.map(renderEventSmallCard)
           ) : (
-            <div className="text-center py-12 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
+            <div className="col-span-full text-center py-12 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
               <Clock className="mx-auto h-12 w-12 text-slate-400 mb-3" />
               <p className="text-slate-500 dark:text-slate-400">{t.noActive}</p>
             </div>
           )
         ) : (
           settledEvents.length > 0 ? (
-            settledEvents.map(renderEventCard)
+            settledEvents.map(renderEventSmallCard)
           ) : (
-            <div className="text-center py-12 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
+            <div className="col-span-full text-center py-12 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
               <Clock className="mx-auto h-12 w-12 text-slate-400 mb-3" />
               <p className="text-slate-500 dark:text-slate-400">{t.noSettled}</p>
             </div>
           )
         )}
       </div>
+
+      {renderEventModal()}
     </div>
   );
 }
